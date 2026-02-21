@@ -1,0 +1,19 @@
+{
+  "name": "sportvault",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "dev": "concurrently -n WEB,API -c auto \"npm run dev -w apps/web\" \"npm run dev -w services/api\"",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:api": "npm run dev -w services/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "prettier": "^3.3.3"
+  }
+}
