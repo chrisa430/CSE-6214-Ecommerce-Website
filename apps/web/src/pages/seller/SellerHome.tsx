@@ -35,11 +35,6 @@ export default function SellerHome() {
             anchor="account"
           />
           <ActionCard
-            title="Search and Compare"
-            desc="Search for products and directly compare them to each other."
-            anchor="search"
-          />
-          <ActionCard
             title="Manage Inventory"
             desc="Review details of your past orders."
             anchor="inventory"
