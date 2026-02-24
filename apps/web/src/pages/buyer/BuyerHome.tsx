@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-export default function AdminHome() {
+export default function BuyerHome() {
   return (
       <div className="col" style={{ gap: 16 }}>
         <div className="row" style={{ flexWrap: "wrap" }}>
@@ -21,7 +21,7 @@ export default function AdminHome() {
               <div className="h2">Options:</div>
             </div>
 
-            <Link className="btn btnPrimary" to="/admin/subpage">
+            <Link className="btn btnPrimary" to="/buyer/subpage">
               Open Buyer Actions
             </Link>
           </div>
