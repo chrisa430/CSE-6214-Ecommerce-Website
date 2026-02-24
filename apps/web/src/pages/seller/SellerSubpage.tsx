@@ -125,29 +125,6 @@ export default function SellerSubpage() {
         </table>
       </Section>
         <br></br>
-      <Section id="search" title="Search and Compare (REQ-028 / REQ-029)">
-            <tr>
-              <td>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Search for items"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                />
-              </td>
-              <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={handleSearch}
-                  disabled={!searchInput}
-                >
-                  Search
-                </button>
-              </td>
-            </tr>
-      </Section>
-        <br></br>
         <Section id="inventory" title="Inventory Management (REQ-038 / REQ-039 / REQ-040 / REQ-041)">
             <table className="table">
           <thead>
