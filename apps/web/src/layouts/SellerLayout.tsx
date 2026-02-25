@@ -84,4 +84,4 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
       {children}
     </NavLink>
   );
-}s
+}
