@@ -13,6 +13,7 @@ import BuyerSubpage from "./pages/buyer/BuyerSubpage";
 import SellerLayout from "./layouts/SellerLayout";
 import SellerHome from "./pages/seller/SellerHome";
 import SellerSubpage from "./pages/seller/SellerSubpage";
+import InventoryManagement from "./pages/seller/InventoryManagement";
 
 export const router = createBrowserRouter([
   { path: "/", element: <Login /> },
@@ -42,6 +43,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <SellerHome /> },
       { path: "subpage", element: <SellerSubpage /> },
+      { path: "inventory", element: <InventoryManagement /> },
     ],
   },
 ]);
