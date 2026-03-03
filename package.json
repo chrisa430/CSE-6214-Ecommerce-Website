@@ -1,19 +1,22 @@
 {
   "name": "sportvault",
+  "version": "4.0.0",
   "private": true,
+  "description": "SportVault – Sprint 4: Authentication, Registration & Microservices",
   "workspaces": [
-    "apps/*",
-    "services/*",
-    "packages/*"
+    "apps/web",
+    "services/authn-authz-service",
+    "services/account-service"
   ],
   "scripts": {
-    "install:all": "npm install --workspaces",
-    "dev": "concurrently -n WEB,API -c auto \"npm run dev -w apps/web\" \"npm run dev -w services/api\"",
-    "dev:web": "npm run dev -w apps/web",
-    "dev:api": "npm run dev -w services/api"
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "install:all": "npm install && cd apps/web && npm install && cd ../../services/authn-authz-service && npm install && cd ../account-service && npm install",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:authn": "cd services/authn-authz-service && npm run dev",
+    "dev:account": "cd services/account-service && npm run dev"
   },
-  "devDependencies": {
-    "concurrently": "^9.0.0",
-    "prettier": "^3.3.3"
+  "dependencies": {
+    "node-fetch": "^3.3.2"
   }
 }
