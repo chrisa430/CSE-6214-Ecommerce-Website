@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  # ── Zookeeper (Kafka dependency) ──────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - sportvault-net
+
+  # ── Apache Kafka ───────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - sportvault-net
+
+  # ── PostgreSQL – authn_authz database ─────────────────────────────────────
+  postgres-authn:
+    image: postgres:16-alpine
+    container_name: postgres-authn
+    environment:
+      POSTGRES_USER: authn_user
+      POSTGRES_PASSWORD: authn_pass
+      POSTGRES_DB: authn_authz
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-authn-data:/var/lib/postgresql/data
+      - ./database/authn_authz/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sportvault-net
+
+  # ── PostgreSQL – account database ─────────────────────────────────────────
+  postgres-account:
+    image: postgres:16-alpine
+    container_name: postgres-account
+    environment:
+      POSTGRES_USER: account_user
+      POSTGRES_PASSWORD: account_pass
+      POSTGRES_DB: account
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-account-data:/var/lib/postgresql/data
+      - ./database/account/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sportvault-net
+
+volumes:
+  postgres-authn-data:
+  postgres-account-data:
+
+networks:
+  sportvault-net:
+    driver: bridge
