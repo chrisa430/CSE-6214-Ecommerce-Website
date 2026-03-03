@@ -16,22 +16,6 @@ export default function SellerSubpage() {
       //search stuff
   }
 
-  function handleUpdate() {
-      //bring to update page
-  }
-
-  function handleRemove() {
-      //remove item
-  }
-
-  function handlePublish() {
-      //send publication request and update status
-  }
-
-  function handleUnpublish() {
-      //do all that and update status
-  }
-
   function handleAccept(){
       //yeehaw
   }
@@ -120,106 +104,6 @@ export default function SellerSubpage() {
             </tr>
             <tr>
                 
-            </tr>
-          </tbody>
-        </table>
-      </Section>
-        <br></br>
-        <Section id="inventory" title="Inventory Management (REQ-038 / REQ-039 / REQ-040 / REQ-041)">
-            <table className="table">
-          <thead>
-            <tr>
-              <th>Items</th>
-              <th>Status</th>
-              <th></th>
-              <th></th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                Signed Jersey
-              </td>
-              <td>
-                  Published
-              </td>
-              <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={handleUpdate}
-                >
-                  Update
-                </button>
-              </td>
-              <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={handleRemove}
-                >
-                  Remove
-                </button>                  
-              </td>
-              <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={handleUnpublish}
-                >
-                  Unpublish
-                </button>                  
-              </td>
-            </tr>
-            <tr>
-              <td>
-                Baseball signed by John Baseball himself only $1.00 one of a kind get it now!!!!1!
-              </td>
-              <td>
-                  Unpublished
-              </td>
-              <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={handleUpdate}
-                >
-                  Update
-                </button>
-              </td>
-              <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={handleRemove}
-                >
-                  Remove
-                </button>                  
-              </td>
-              <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={handlePublish}
-                >
-                  Publish
-                </button>                  
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="New Item"
-                  value={addInput}
-                  onChange={(e) => setAddInput(e.target.value)}
-                />
-              </td>
-              <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={handleSubmit}
-                  disabled={!addInput}
-                >
-                  Add Item
-                </button>
-              </td>
             </tr>
           </tbody>
         </table>

@@ -23,7 +23,6 @@ export default function SellerLayout() {
             <NavItem to="/seller">Dashboard</NavItem>
             <NavItem to="/seller/subpage">Seller Actions</NavItem>
             <NavItem to="/seller/subpage#account">Account Information</NavItem>
-            <NavItem to="/seller/subpage#inventory">Manage Inventory</NavItem>
             <NavItem to="/seller/subpage#audit">Returns</NavItem>
             <NavItem to="/seller/inventory">Inventory</NavItem>
           </nav>

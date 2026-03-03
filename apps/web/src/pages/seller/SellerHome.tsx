@@ -35,11 +35,6 @@ export default function SellerHome() {
             anchor="account"
           />
           <ActionCard
-            title="Manage Inventory"
-            desc="Review details of your past orders."
-            anchor="inventory"
-          />
-          <ActionCard
             title="Returns"
             desc="See returns for your products initiated by buyers."
             anchor="returns"
