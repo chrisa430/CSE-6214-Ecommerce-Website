@@ -30,3 +30,11 @@ This repository contains the source code, documentation, and requirements artifa
 - Product reviews and ratings
 - Administrative tools for managing products, users, and orders
 - Secure authentication and role-based access control
+
+## Installation
+The application can be deployed as containers in Docker. The docker-compose.yml file contains the Docker configuration.
+
+1. docker compose up 
+2. npm run dev -w services/account-service
+3. npm run dev -w services/authn-authz-service
+4. npm run dev -v apps/web
