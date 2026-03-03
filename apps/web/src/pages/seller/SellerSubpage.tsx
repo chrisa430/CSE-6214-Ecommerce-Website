@@ -16,6 +16,22 @@ export default function SellerSubpage() {
       //search stuff
   }
 
+  function handleUpdate() {
+      //bring to update page
+  }
+
+  function handleRemove() {
+      //remove item
+  }
+
+  function handlePublish() {
+      //send publication request and update status
+  }
+
+  function handleUnpublish() {
+      //do all that and update status
+  }
+
   function handleAccept(){
       //yeehaw
   }
@@ -109,7 +125,6 @@ export default function SellerSubpage() {
         </table>
       </Section>
         <br></br>
-<<<<<<< main
       <Section id="search" title="Search and Compare (REQ-028 / REQ-029)">
             <tr>
               <td>
@@ -233,8 +248,6 @@ export default function SellerSubpage() {
         </table>
       </Section>
         <br></br>
-=======
->>>>>>> inventory-management
     <Section id="returns" title="Handle Returns (REQ-043 / REQ-081)">
         <div className="divider" />
         <table className="table"> 
