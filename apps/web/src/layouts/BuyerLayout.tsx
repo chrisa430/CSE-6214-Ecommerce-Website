@@ -1,7 +1,14 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function BuyerLayout() {
   const navigate = useNavigate();
+  const { logout, user } = useAuth();
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login");
+  }
 
   return (
       <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "280px 1fr" }}>
@@ -30,9 +37,9 @@ export default function BuyerLayout() {
             <div style={{ flex: 1 }} />
 
             <div className="divider" />
-            <button className="btn btnDanger" onClick={() => navigate("/login")}>
-              Log out
-            </button>
+            <button className="btn btnDanger" onClick={handleLogout}>
+            Log out
+          </button>
           </div>
         </aside>
 
