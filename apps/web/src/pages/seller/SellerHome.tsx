@@ -35,6 +35,7 @@ export default function SellerHome() {
             anchor="account"
           />
           <ActionCard
+<<<<<<< main
             title="Search and Compare"
             desc="Search for products and directly compare them to each other."
             anchor="search"
@@ -45,6 +46,8 @@ export default function SellerHome() {
             anchor="inventory"
           />
           <ActionCard
+=======
+>>>>>>> inventory-management
             title="Returns"
             desc="See returns for your products initiated by buyers."
             anchor="returns"
