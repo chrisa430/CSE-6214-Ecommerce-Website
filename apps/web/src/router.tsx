@@ -17,34 +17,34 @@ import SellerSubpage from "./pages/seller/SellerSubpage";
 import InventoryManagement from "./pages/seller/InventoryManagement";
 
 export const router = createBrowserRouter([
-  { path: "/", element: <Login /> },
-  { path: "/login", element: <Login /> },
+    { path: "/", element: <Navigate to="/login" replace /> },
+    { path: "/login", element: <Login /> },
+    { path: "/register", element: <Register /> },
 
-  {
-    path: "/admin",
-    element: <AdminLayout />,
-    children: [
-      { index: true, element: <AdminHome /> },
-      { path: "subpage", element: <AdminSubpage /> },
-    ],
-  },
+    {
+        path: "/admin",
+        element: <AdminLayout />,
+        children: [
+            { index: true, element: <AdminHome /> },
+            { path: "subpage", element: <AdminSubpage /> },
+        ],
+    },
 
-  {
-    path: "/buyer",
-    element: <BuyerLayout />,
-    children: [
-      { index: true, element: <BuyerHome /> },
-      { path: "subpage", element: <BuyerSubpage /> },
-    ],
-  },
+    {
+        path: "/buyer",
+        element: <BuyerLayout />,
+        children: [
+            { index: true, element: <BuyerHome /> },
+            { path: "subpage", element: <BuyerSubpage /> },
+        ],
+    },
 
-  {
-    path: "/seller",
-    element: <SellerLayout />,
-    children: [
-      { index: true, element: <SellerHome /> },
-      { path: "subpage", element: <SellerSubpage /> },
-      { path: "inventory", element: <InventoryManagement /> },
-    ],
-  },
+    {
+        path: "/seller",
+        element: <SellerLayout />,
+        children: [
+            { index: true, element: <SellerHome /> },
+            { path: "subpage", element: <SellerSubpage /> },
+        ],
+    },
 ]);
