@@ -64,9 +64,94 @@ services:
     networks:
       - sportvault-net
 
+  # ── PostgreSQL – admin database ───────────────────────────────────────────
+  postgres-admin:
+    image: postgres:16-alpine
+    container_name: postgres-admin
+    environment:
+      POSTGRES_USER: admin_user
+      POSTGRES_PASSWORD: admin_pass
+      POSTGRES_DB: admin
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-admin-data:/var/lib/postgresql/data
+      - ./database/admin/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sportvault-net
+
+  # ── PostgreSQL – shopping_cart database ───────────────────────────────────
+  postgres-shopping-cart:
+    image: postgres:16-alpine
+    container_name: postgres-shopping-cart
+    environment:
+      POSTGRES_USER: shopping_cart_user
+      POSTGRES_PASSWORD: shopping_cart_pass
+      POSTGRES_DB: shopping_cart
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-shopping-cart-data:/var/lib/postgresql/data
+      - ./database/shopping_cart/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sportvault-net
+
+  # ── PostgreSQL – order database ───────────────────────────────────────────
+  postgres-order:
+    image: postgres:16-alpine
+    container_name: postgres-order
+    environment:
+      POSTGRES_USER: order_user
+      POSTGRES_PASSWORD: order_pass
+      POSTGRES_DB: order
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres-order-data:/var/lib/postgresql/data
+      - ./database/order/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sportvault-net
+
+  # ── PostgreSQL – inventory database ───────────────────────────────────────
+  postgres-inventory:
+    image: postgres:16-alpine
+    container_name: postgres-inventory
+    environment:
+      POSTGRES_USER: inventory_user
+      POSTGRES_PASSWORD: inventory_pass
+      POSTGRES_DB: inventory
+    ports:
+      - "5437:5432"
+    volumes:
+      - postgres-inventory-data:/var/lib/postgresql/data
+      - ./database/inventory/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sportvault-net
+
+  # ── PostgreSQL – seller database ──────────────────────────────────────────
+  postgres-seller:
+    image: postgres:16-alpine
+    container_name: postgres-seller
+    environment:
+      POSTGRES_USER: seller_user
+      POSTGRES_PASSWORD: seller_pass
+      POSTGRES_DB: seller
+    ports:
+      - "5438:5432"
+    volumes:
+      - postgres-seller-data:/var/lib/postgresql/data
+      - ./database/seller/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sportvault-net
+
 volumes:
   postgres-authn-data:
   postgres-account-data:
+  postgres-admin-data:
+  postgres-shopping-cart-data:
+  postgres-order-data:
+  postgres-inventory-data:
+  postgres-seller-data:
 
 networks:
   sportvault-net:
