@@ -45,6 +45,7 @@ export const router = createBrowserRouter([
         children: [
             { index: true, element: <SellerHome /> },
             { path: "subpage", element: <SellerSubpage /> },
+            { path: "inventory", element: <InventoryManagement /> }, 
         ],
     },
 ]);
