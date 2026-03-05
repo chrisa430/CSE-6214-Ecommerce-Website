@@ -57,13 +57,17 @@ CREATE TABLE IF NOT EXISTS notification_type (
 );
 
 INSERT INTO notification_type (name, short_desc, long_desc) VALUES
-  ('order_confirmation',  'Order Confirmation',   'Buyer notification when an order is placed'),
-  ('order_shipped',       'Order Shipped',        'Buyer notification when an order ships'),
-  ('account_suspended',   'Account Suspended',    'Notification of account suspension'),
-  ('listing_approved',    'Listing Approved',     'Seller notification when a listing is approved'),
-  ('listing_rejected',    'Listing Rejected',     'Seller notification when a listing is rejected'),
-  ('password_reset',      'Password Reset',       'Account password reset notification'),
-  ('admin_alert',         'Admin Alert',          'Internal platform administrative alert')
+  ('order_confirmation',         'Order Confirmation',         'Buyer notification when an order is placed'),
+  ('order_shipped',              'Order Shipped',              'Buyer notification when an order ships'),
+  ('account_suspended',          'Account Suspended',          'Notification of account suspension'),
+  ('listing_approved',           'Listing Approved',           'Seller notification when a listing is approved'),
+  ('listing_rejected',           'Listing Rejected',           'Seller notification when a listing is rejected'),
+  ('password_reset',             'Password Reset',             'Account password reset notification'),
+  ('admin_alert',                'Admin Alert',                'Internal platform administrative alert'),
+  ('account creation submitted', 'Account Creation Submitted', 'Account has submitted for creation approval by an Admin'),
+  ('account activated',          'Account Activated',          'Account has been activated by an Admin'),
+  ('account suspended',          'Account Suspended',          'Account has been suspended by an Admin'),
+  ('account closed',             'Account Closed',             'Account has been closed by the account owner')
 ON CONFLICT DO NOTHING;
 
 -- ── Core tables ────────────────────────────────────────────────────────────
@@ -88,6 +92,8 @@ CREATE TABLE IF NOT EXISTS notification (
     notification_type   UUID         NOT NULL REFERENCES notification_type(id),
     subject             VARCHAR(255),
     message_body        TEXT,
+    outbox_flag         BOOLEAN      NOT NULL DEFAULT FALSE,
+    sent_flag           BOOLEAN      NOT NULL DEFAULT FALSE,
     date_sent           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
