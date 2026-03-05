@@ -28,9 +28,10 @@ CREATE TABLE IF NOT EXISTS account_status (
 );
 
 INSERT INTO account_status (name, short_desc, long_desc) VALUES
-  ('active',    'Active',   'Account is in good standing'),
-  ('suspended', 'Suspended','Account has been temporarily suspended'),
-  ('closed',    'Closed',   'Account has been permanently closed')
+  ('active',    'Active',    'Account is in good standing'),
+  ('suspended', 'Suspended', 'Account has been temporarily suspended'),
+  ('closed',    'Closed',    'Account has been permanently closed'),
+  ('open',      'Open',      'Account has submitted for creation approval by an Admin')
 ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS address_type (

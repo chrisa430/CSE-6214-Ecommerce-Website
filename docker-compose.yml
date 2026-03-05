@@ -144,6 +144,40 @@ services:
     networks:
       - sportvault-net
 
+  # ── AdminService (Node.js microservice) ───────────────────────────────────
+  # Uncomment to run AdminService inside Docker (otherwise run with `npm run dev`)
+  # admin-service:
+  #   build:
+  #     context: ./services/admin-service
+  #     dockerfile: Dockerfile
+  #   container_name: admin-service
+  #   environment:
+  #     NODE_ENV: production
+  #     PORT: 3003
+  #     DB_HOST: postgres-admin
+  #     DB_PORT: 5432
+  #     DB_NAME: admin
+  #     DB_USER: admin_user
+  #     DB_PASS: admin_pass
+  #     ACCOUNT_DB_HOST: postgres-account
+  #     ACCOUNT_DB_PORT: 5432
+  #     ACCOUNT_DB_NAME: account
+  #     ACCOUNT_DB_USER: account_user
+  #     ACCOUNT_DB_PASS: account_pass
+  #     KAFKA_BROKERS: kafka:29092
+  #     INTERNAL_SECRET: internal-secret
+  #     APP_BASE_URL: http://localhost:5173
+  #     OUTBOX_POLL_MS: 30000
+  #   ports:
+  #     - "3003:3003"
+  #   depends_on:
+  #     - postgres-admin
+  #     - postgres-account
+  #     - kafka
+  #   networks:
+  #     - sportvault-net
+
+
 volumes:
   postgres-authn-data:
   postgres-account-data:

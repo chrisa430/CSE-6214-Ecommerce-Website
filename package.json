@@ -2,21 +2,27 @@
   "name": "sportvault",
   "version": "4.0.0",
   "private": true,
-  "description": "SportVault – Sprint 4: Authentication, Registration & Microservices",
+  "description": "SportVault \u2013 Sprint 4: Authentication, Registration & Microservices",
   "workspaces": [
     "apps/web",
     "services/authn-authz-service",
-    "services/account-service"
+    "services/account-service",
+    "services/admin-service"
   ],
   "scripts": {
+    "dev": "npx --yes concurrently --kill-others-on-fail --names \"WEB,AUTHN,ACCOUNT,ADMIN\" --prefix-colors \"cyan,yellow,green,magenta\" \"npm run dev:web\" \"npm run dev:authn\" \"npm run dev:account\" \"npm run dev:admin\"",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "install:all": "npm install && cd apps/web && npm install && cd ../../services/authn-authz-service && npm install && cd ../account-service && npm install",
+    "install:all": "npm install && cd apps/web && npm install && cd ../../services/authn-authz-service && npm install && cd ../account-service && npm install && cd ../admin-service && npm install",
     "dev:web": "cd apps/web && npm run dev",
     "dev:authn": "cd services/authn-authz-service && npm run dev",
-    "dev:account": "cd services/account-service && npm run dev"
+    "dev:account": "cd services/account-service && npm run dev",
+    "dev:admin": "cd services/admin-service && npm run dev"
   },
   "dependencies": {
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }
