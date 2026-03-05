@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { registerUser, extractApiError, RegisterPayload } from "../services/api";
 
 const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{8,}$/;
+const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{12,}$/;
 
 type AccountType = "admin" | "buyer" | "seller";
 
@@ -24,7 +24,7 @@ function validate(form: FormState): Record<string, string> {
 
   if (!PASSWORD_RE.test(form.password))
     errors.password =
-      "Password must be ≥8 chars with at least 1 uppercase, 1 lowercase, 1 digit, and 1 special character (* $ ! - @).";
+      "Password must be ≥12 chars with at least 1 uppercase, 1 lowercase, 1 digit, and 1 special character (* $ ! - @).";
 
   if (form.password !== form.confirmPw)
     errors.confirmPw = "Passwords do not match.";
@@ -100,15 +100,9 @@ export default function Register() {
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 18 }}>
         <div className="container" style={{ maxWidth: 480 }}>
           <div className="card cardPad" style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 48 }}>⏳</div>
-            <h2 className="h1" style={{ marginTop: 12 }}>Request Submitted</h2>
-            <p className="muted">
-              Your account request is pending admin approval. You will be notified by
-              email once a decision has been made.
-            </p>
-            <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-              Redirecting you to sign in…
-            </p>
+            <div style={{ fontSize: 48 }}>✅</div>
+            <h2 className="h1" style={{ marginTop: 12 }}>Account Created</h2>
+            <p className="muted">Redirecting you to sign in…</p>
           </div>
         </div>
       </div>
@@ -291,7 +285,7 @@ export default function Register() {
 
           <div className="divider" />
           <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
-            Password requirements: 8+ characters · uppercase · lowercase · digit ·
+            Password requirements: 12+ characters · uppercase · lowercase · digit ·
             special character (* $ ! - @)
           </div>
         </div>
@@ -334,7 +328,7 @@ function PasswordStrength({ password }: { password: string }) {
   if (!password) return null;
 
   const checks = {
-    "8+ characters":     password.length >= 8,
+    "12+ characters":    password.length >= 12,
     "Uppercase letter":  /[A-Z]/.test(password),
     "Lowercase letter":  /[a-z]/.test(password),
     "Digit (0–9)":       /\d/.test(password),

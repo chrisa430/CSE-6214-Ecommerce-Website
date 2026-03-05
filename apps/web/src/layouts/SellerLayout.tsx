@@ -1,29 +1,19 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 
 export default function SellerLayout() {
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
-
-  async function handleLogout() {
-    await logout();
-    navigate("/login");
-  }
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "280px 1fr" }}>
       <aside style={{ padding: 18 }}>
-        <div className="card cardPad" style={{ height: "calc(100vh - 36px)", position: "sticky", top: 18, display: "flex", flexDirection: "column" }}>
-          <div className="col" style={{ gap: 6 }}>
-            <div className="badge">SportVault • Seller</div>
-            <div className="h2">Seller Hub</div>
-            {user && (
-              <div className="muted" style={{ fontSize: 12 }}>
-                {user.firstName} {user.lastName}
+        <div className="card cardPad" style={{ height: "calc(100vh - 36px)", position: "sticky", top: 18 }}>
+          <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
+            <div className="col" style={{ gap: 6 }}>
+              <div className="badge">SportVault • Seller</div>
+              <div className="h2">Action Page</div>
+              <div className="muted" style={{ fontSize: 13 }}>
+                Manage account details, inventory, and return requests.
               </div>
-            )}
-            <div className="muted" style={{ fontSize: 13 }}>
-              Manage listings, orders, and payouts.
             </div>
           </div>
 
@@ -31,13 +21,16 @@ export default function SellerLayout() {
 
           <nav className="col" style={{ gap: 10 }}>
             <NavItem to="/seller">Dashboard</NavItem>
-            <NavItem to="/seller/subpage">My Listings</NavItem>
+            <NavItem to="/seller/subpage">Seller Actions</NavItem>
+            <NavItem to="/seller/subpage#account">Account Information</NavItem>
+            <NavItem to="/seller/subpage#audit">Returns</NavItem>
+            <NavItem to="/seller/inventory">Inventory</NavItem>
           </nav>
 
           <div style={{ flex: 1 }} />
 
           <div className="divider" />
-          <button className="btn btnDanger" onClick={handleLogout}>
+          <button className="btn btnDanger" onClick={() => navigate("/login")}>
             Log out
           </button>
         </div>
@@ -45,11 +38,27 @@ export default function SellerLayout() {
 
       <main style={{ padding: 18 }}>
         <header className="container" style={{ marginBottom: 14 }}>
-          <div className="card cardPad" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div className="h1">Seller Portal</div>
-            <button className="btn" onClick={() => navigate("/seller")}>Refresh</button>
+          <div
+            className="card cardPad"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <div className="col" style={{ gap: 4 }}>
+              <div className="h1">Seller Portal</div>
+            </div>
+
+            <div className="row" style={{ alignItems: "center" }}>
+              <button className="btn" onClick={() => navigate("/seller")}>
+                Refresh
+              </button>
+            </div>
           </div>
         </header>
+
         <div className="container">
           <Outlet />
         </div>
@@ -76,4 +85,3 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
     </NavLink>
   );
 }
-

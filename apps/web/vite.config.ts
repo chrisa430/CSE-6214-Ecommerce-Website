@@ -18,12 +18,6 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/accounts/, "/accounts"),
       },
-      // Proxy admin calls to AdminService
-      "/api/admin": {
-        target: "http://localhost:3003",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/admin/, "/admin"),
-      },
     },
   },
 });
