@@ -82,16 +82,18 @@ ON CONFLICT DO NOTHING;
 -- ── Core tables ────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS account (
-    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id       VARCHAR(255) NOT NULL UNIQUE,   -- email address
-    password_hash VARCHAR(255) NOT NULL,          -- bcrypt hash
-    first_name    VARCHAR(128) NOT NULL,
-    last_name     VARCHAR(128) NOT NULL,
-    closed_date   TIMESTAMPTZ,
-    type_id       UUID        NOT NULL REFERENCES account_type(id),
-    status_id     UUID        NOT NULL REFERENCES account_status(id),
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id          VARCHAR(255) NOT NULL UNIQUE,   -- email address
+    password_hash    VARCHAR(255) NOT NULL,          -- bcrypt hash
+    first_name       VARCHAR(128) NOT NULL,
+    last_name        VARCHAR(128) NOT NULL,
+    activated_date   TIMESTAMPTZ,                    -- set when status transitions to 'active'
+    suspended_date   TIMESTAMPTZ,                    -- set when status transitions to 'suspended'
+    closed_date      TIMESTAMPTZ,                    -- set when status transitions to 'closed'
+    type_id          UUID         NOT NULL REFERENCES account_type(id),
+    status_id        UUID         NOT NULL REFERENCES account_status(id),
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_account_user_id ON account(user_id);

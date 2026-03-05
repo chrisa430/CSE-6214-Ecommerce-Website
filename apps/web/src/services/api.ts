@@ -10,11 +10,18 @@ const accountApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Attach JWT to every request automatically
-authApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
+const adminApi = axios.create({
+  baseURL: "/api/admin",
+  headers: { "Content-Type": "application/json" },
+});
+
+// Attach JWT to every authenticated request automatically
+[authApi, accountApi, adminApi].forEach((instance) => {
+  instance.interceptors.request.use((config) => {
+    const token = localStorage.getItem("accessToken");
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  });
 });
 
 // ── Auth endpoints ──────────────────────────────────────────────────────────
@@ -85,4 +92,64 @@ export function extractApiError(err: unknown): string {
     return err.message;
   }
   return "An unexpected error occurred.";
+}
+
+// ── Admin endpoints ─────────────────────────────────────────────────────────
+
+/** Shape of an account record returned by GET /admin/accounts/open */
+export interface OpenAccount {
+  id:        string;
+  email:     string;
+  firstName: string;
+  lastName:  string;
+  type:      string;
+  status:    string;
+  createdAt: string;
+}
+
+/** Full account record returned by GET /accounts/search */
+export interface AccountRecord {
+  id:             string;
+  userId:         string;
+  firstName:      string;
+  lastName:       string;
+  type:           string;
+  status:         string;
+  activatedDate:  string | null;
+  suspendedDate:  string | null;
+  closedDate:     string | null;
+  createdAt:      string;
+}
+
+export interface AccountSearchParams {
+  type?:      string;
+  status?:    string;
+  sortBy?:    "activated_date" | "suspended_date" | "closed_date" | "created_at";
+  sortOrder?: "asc" | "desc";
+}
+
+/** Search / filter / sort all accounts — admin only */
+export async function searchAccounts(
+  params: AccountSearchParams = {}
+): Promise<AccountRecord[]> {
+  const { data } = await accountApi.get<AccountRecord[]>("/search", { params });
+  return data;
+}
+
+/** Fetch all accounts with status = 'open' (pending admin approval) */
+export async function fetchOpenAccounts(): Promise<OpenAccount[]> {
+  const { data } = await adminApi.get<OpenAccount[]>("/accounts/open");
+  return data;
+}
+
+/** Bulk approve or reject open account requests */
+export async function submitAccountDecision(
+  accountIds: string[],
+  decision:   "approve" | "reject"
+): Promise<{ message: string; count: number }> {
+  const { data } = await adminApi.post<{ message: string; count: number }>(
+    "/accounts/decision",
+    { accountIds, decision }
+  );
+  return data;
 }
