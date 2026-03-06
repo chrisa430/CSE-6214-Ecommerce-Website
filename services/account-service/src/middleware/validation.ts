@@ -7,7 +7,7 @@
 import { Request, Response, NextFunction } from "express";
 
 const EMAIL_RE    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{12,}$/;
+const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{8,}$/;
 
 const VALID_TYPES = new Set(["admin", "buyer", "seller"]);
 
@@ -44,7 +44,7 @@ export function validateRegistration(
 
   if (!password || !PASSWORD_RE.test(password)) {
     errors.password =
-      "Password must be ≥12 characters and include at least one uppercase letter, " +
+      "Password must be ≥8 characters and include at least one uppercase letter, " +
       "one lowercase letter, one digit, and one special character (* $ ! - @).";
   }
 

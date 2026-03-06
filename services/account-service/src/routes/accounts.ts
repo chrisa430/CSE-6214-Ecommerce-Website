@@ -1,29 +1,27 @@
 /**
- * @fileoverview Three route handlers
+ * @fileoverview Account route handlers
  * @module accounts.ts
  * @author Darrell Hobson
- * @Date 2026.02.28
+ * @Date 2026.03.05
+ *
+ * Sprint 4 changes:
+ *   - POST /accounts/register sets status = 'open' (pending admin approval)
+ *   - Publishes ACCOUNT_CREATION_SUBMITTED Kafka event with enough context for
+ *     AdminService to insert notification rows into its own database.
+ *     AccountService touches ONLY its own database — microservice boundary respected.
  */
 import { Router, Request, Response } from "express";
 import bcrypt from "bcrypt";
-import { getPool } from "../db/pool";
+import { getPool }              from "../db/pool";
 import { publishEvent, TOPICS } from "../kafka/client";
 import { validateRegistration } from "../middleware/validation";
-import { logger } from "../logger";
+import { logger }               from "../logger";
 
-const router = Router();
+const router        = Router();
 const BCRYPT_ROUNDS = 12;
 
-/**
- * Internal auth guard (service-to-service)
- * @param req
- * @param res
- * @param next
- * @param password
- * @returns void
- * @remarks
- * -
- */
+// ── Internal-secret guard ─────────────────────────────────────────────────────
+
 function requireInternalSecret(req: Request, res: Response, next: () => void): void {
   const secret = req.headers["x-internal-secret"];
   if (secret !== (process.env.INTERNAL_SECRET || "internal-secret")) {
@@ -33,14 +31,8 @@ function requireInternalSecret(req: Request, res: Response, next: () => void): v
   next();
 }
 
-/**
- * POST /accounts/register
- *
- * @returns Promise<void>
- * @remarks
- * -
- *
- */
+// ── POST /accounts/register ───────────────────────────────────────────────────
+
 router.post(
   "/register",
   validateRegistration,
@@ -49,7 +41,7 @@ router.post(
     const pool = getPool();
 
     try {
-      // Duplicate email check
+      // ── 1. Duplicate email check ──────────────────────────────────────────
       const existing = await pool.query(
         "SELECT id FROM account WHERE user_id = $1",
         [userId.toLowerCase()]
@@ -59,7 +51,7 @@ router.post(
         return;
       }
 
-      // Resolve type_id and default status_id
+      // ── 2. Resolve type_id ────────────────────────────────────────────────
       const typeRow = await pool.query(
         "SELECT id FROM account_type WHERE name = $1",
         [accountType]
@@ -69,17 +61,22 @@ router.post(
         return;
       }
 
+      // ── 3. Resolve status_id = 'open' ─────────────────────────────────────
       const statusRow = await pool.query(
-        "SELECT id FROM account_status WHERE name = 'active'"
+        "SELECT id FROM account_status WHERE name = 'open'"
       );
+      if (!statusRow.rowCount || statusRow.rowCount === 0) {
+        res.status(500).json({ error: "Account status 'open' not found. Check DB seed data." });
+        return;
+      }
 
-      const typeId   = typeRow.rows[0].id as string;
+      const typeId   = typeRow.rows[0].id   as string;
       const statusId = statusRow.rows[0].id as string;
 
-      // Hash password
+      // ── 4. Hash password ──────────────────────────────────────────────────
       const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-      // Insert account
+      // ── 5. Insert account ─────────────────────────────────────────────────
       const insertResult = await pool.query(
         `INSERT INTO account (user_id, password_hash, first_name, last_name, type_id, status_id)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -96,26 +93,49 @@ router.post(
 
       const newAccount = insertResult.rows[0];
 
-      // Audit log
+      // ── 6. Audit log (own DB only) ────────────────────────────────────────
       await pool.query(
         `INSERT INTO account_audit_log (actor_id, target_id, action, detail)
          VALUES ($1, $2, $3, $4)`,
-        [newAccount.id, newAccount.id, "ACCOUNT_CREATED", `Account created for ${userId}`]
+        [
+          newAccount.id,
+          newAccount.id,
+          "ACCOUNT_CREATION_SUBMITTED",
+          `Account creation submitted for ${userId}`,
+        ]
       );
 
-      // Publish Kafka event
+      // ── 7. Fetch admin account IDs (own DB — account_type='admin') ────────
+      //
+      // AccountService queries its own DB for admin IDs and includes them in
+      // the Kafka event payload. AdminService consumes the event and writes
+      // notification rows into its own database — no cross-DB writes here.
+      const adminAccounts = await pool.query(
+        `SELECT a.id
+         FROM account a
+         JOIN account_type at ON at.id = a.type_id
+         WHERE at.name = 'admin'`
+      );
+
+      const adminAccountIds = adminAccounts.rows.map((r) => r.id as string);
+
+      // ── 8. Publish enriched Kafka event ───────────────────────────────────
       await publishEvent(TOPICS.ACCOUNT_EVENTS, newAccount.id, {
-        eventType:   "ACCOUNT_CREATED",
-        accountId:   newAccount.id,
-        email:       userId.toLowerCase(),
+        eventType:       "ACCOUNT_CREATION_SUBMITTED",
+        accountId:       newAccount.id as string,
+        email:           userId.toLowerCase(),
+        firstName:       firstName.trim(),
+        lastName:        lastName.trim(),
         accountType,
-        occurredAt:  new Date().toISOString(),
+        adminAccountIds,                           // AdminService uses these to notify each admin
+        appBaseUrl:      process.env.APP_BASE_URL || "http://localhost:5173",
+        occurredAt:      new Date().toISOString(),
       });
 
-      logger.info(`Account created: ${userId} (${accountType})`);
+      logger.info(`Account creation submitted: ${userId} (${accountType})`);
 
       res.status(201).json({
-        message:   "Account created successfully.",
+        message:   "Account creation request submitted. Pending admin approval.",
         accountId: newAccount.id,
         user: {
           id:        newAccount.id,
@@ -131,14 +151,8 @@ router.post(
   }
 );
 
-/**
- * GET /internal/accounts/by-email/:email
- *
- * @returns Promise<void>
- * @remarks
- * - Called internally by AuthnAuthzService for credential verification
- *
- */
+// ── GET /accounts/by-email/:email  (internal — called by AuthnAuthzService) ──
+
 router.get(
   "/by-email/:email",
   requireInternalSecret as any,
@@ -175,14 +189,8 @@ router.get(
   }
 );
 
-/**
- * GET /accounts/:id
- *
- * @returns Promise<void>
- * @remarks
- * -
- *
- */
+// ── GET /accounts/:id ────────────────────────────────────────────────────────
+
 router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   const pool = getPool();
   try {
