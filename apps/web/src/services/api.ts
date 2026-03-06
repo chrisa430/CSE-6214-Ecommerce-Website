@@ -10,6 +10,27 @@ const accountApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+const inventoryApi = axios.create({
+  baseURL: "/api/inventory",
+  headers: { "Content-Type": "application/json" },
+});
+
+inventoryApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem("accessToken");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export async function getMyProducts(): Promise<Product[]> {
+  const { data } = await inventoryApi.get<Product[]>("/products/mine");
+  return data;
+}
+
+export async function createProduct(payload: CreateProductPayload): Promise<Product> {
+  const { data } = await inventoryApi.post<Product>("/products", payload);
+  return data;
+}
+
 // Attach JWT to every request automatically
 authApi.interceptors.request.use((config) => {
   const token = localStorage.getItem("accessToken");
@@ -85,4 +106,45 @@ export function extractApiError(err: unknown): string {
     return err.message;
   }
   return "An unexpected error occurred.";
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  shortDesc?: string;
+  longDesc?: string;
+  quantity: number;
+  unitPrice: number;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateProductPayload {
+  name: string;
+  shortDesc?: string;
+  longDesc?: string;
+  category: string;
+  subCategory?: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+
+export interface Category {
+  id: string;
+  name: string;
+}
+
+export async function getCategories(): Promise<Category[]> {
+  const { data } = await inventoryApi.get<Category[]>("/products/categories");
+  return data;
+}
+
+export async function updateProduct(
+  id: string,
+  payload: Partial<CreateProductPayload>
+): Promise<Product> {
+  const { data } = await inventoryApi.patch<Product>(`/products/${id}`, payload);
+  return data;
 }

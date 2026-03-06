@@ -91,7 +91,9 @@ INSERT INTO product_status_type (name, short_desc, long_desc) VALUES
   ('active',    'Active',    'Listing is live and available for purchase'),
   ('sold',      'Sold',      'Item has been sold'),
   ('suspended', 'Suspended', 'Listing has been suspended by an admin'),
-  ('removed',   'Removed',   'Listing has been removed by the seller')
+  ('removed',   'Removed',   'Listing has been removed by the seller'),
+  ('pending', 'Pending', 'Listing is awaiting admin approval'),
+  ('rejected', 'Rejected', 'Listing was rejected by admin')
 ON CONFLICT DO NOTHING;
 
 -- ── Add deferred FK constraints on subcategory_type ───────────────────────
@@ -156,3 +158,8 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_product_updated_at
 BEFORE UPDATE ON product
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+ALTER TABLE product
+ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+ADD COLUMN IF NOT EXISTS unit_price NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (unit_price >= 0),
+ADD COLUMN IF NOT EXISTS status UUID REFERENCES product_status_type(id);

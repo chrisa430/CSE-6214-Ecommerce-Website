@@ -1,37 +1,92 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  Category,
+  createProduct,
+  getCategories,
+  getMyProducts,
+  updateProduct,
+  Product,
+} from "../../services/api";
+
 
 export default function InventoryManagement() {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<Product[]>([]);
   const [newItemName, setNewItemName] = useState("");
   const [updateInput, setUpdateInput] = useState("");
-  const [nextId, setNextId] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState("");
 
-  function addItem() {
-    if (!newItemName) return;  //if nothing is typed in the new item box, nothing happens
-    const newItem = {id: nextId, name: newItemName, status: "Unpublished"};
-    setItems([...items, newItem]);
-    setNextId(nextId + 1); //iterates to the next id starting at 0. This can only be for use on the seller account, will need to be translated to unique id for the market.
-    setNewItemName(""); //resets the box
-  }
+  useEffect(() => {
+  async function loadData() {
+    try {
+      const [products, categoryList] = await Promise.all([
+        getMyProducts(),
+        getCategories(),
+      ]);
 
-  function removeItem(id) {
-    setItems(function(items) {
-      const updatedItems = [];
-
-      for (let i = 0; i < items.length; i++) { //Goes through every item and puts ones that aren't the item to remove into the list of items to be kept
-        if (items[i].id !== id) {
-          updatedItems.push(items[i]);
-          }
+      if (Array.isArray(products)) {
+        setItems(products);
+      } else {
+        console.error("Expected array but got:", products);
+        setItems([]);
+        setError("Products response was not a list.");
       }
 
-    return updatedItems;
+      setCategories(categoryList);
+      if (categoryList.length > 0) {
+        setSelectedCategory(categoryList[0].id);
+      }
+    } catch (err) {
+      console.error(err);
+      setItems([]);
+      setError("Failed to load inventory data.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  loadData();
+  }, []);
+
+  async function addItem() {
+    if (!newItemName || !selectedCategory) return;
+
+    try {
+      const created = await createProduct({
+        name: newItemName,
+        category: selectedCategory,
+        quantity: 0,
+        unitPrice: 0,
+      });
+
+      setItems((prev) => [...prev, created]);
+      setNewItemName("");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to create product.");
+    }
+  }
+
+  function removeItem(id: string) {
+    setItems(function (items) {
+      const updatedItems: Product[] = [];
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].id !== id) {
+          updatedItems.push(items[i]);
+        }
+      }
+
+      return updatedItems;
     });
   }
 
-  function publishItem(id) {
-    setItems(function(items){
-      return items.map(function(item) {
-        if (item.id === id) { //searches for the item that matches the id and sets its status to pending
+  function publishItem(id: string) {
+    setItems(function (items) {
+      return items.map(function (item) {
+        if (item.id === id) {
           return { ...item, status: "Pending" };
         } else {
           return item;
@@ -40,9 +95,9 @@ export default function InventoryManagement() {
     });
   }
 
-  function unpublishItem(id) { //this is basically a copy of publishItem but it sets it to unpublished instead
-    setItems(function(items){
-      return items.map(function(item) {
+  function unpublishItem(id: string) {
+    setItems(function (items) {
+      return items.map(function (item) {
         if (item.id === id) {
           return { ...item, status: "Unpublished" };
         } else {
@@ -52,20 +107,37 @@ export default function InventoryManagement() {
     });
   }
 
-  function updateItem(id) {
+  async function updateItem(id: string) {
     if (!updateInput) return;
 
-    setItems(function(items){
-      return items.map(function(item) {
-        if (item.id === id) {
-          return { ...item, name: updateInput };
-        } else {
-          return item;
-        }
-      });
-    });
+    const item = items.find((i) => i.id === id);
 
-    setUpdateInput("");
+    if (!item) return;
+
+    try {
+      const updated = await updateProduct(id, {
+        name: updateInput,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      });
+
+      setItems((items) =>
+        items.map((i) => (i.id === id ? updated : i))
+      );
+
+      setUpdateInput("");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to update product.");
+    }
+  }
+
+  if (loading) {
+    return <div className="card cardPad">Loading inventory...</div>;
+  }
+
+  if (error) {
+    return <div className="card cardPad">{error}</div>;
   }
 
   return (
@@ -80,14 +152,18 @@ export default function InventoryManagement() {
           className="input"
           placeholder="Enter new item name"
           value={updateInput}
-          onChange={function(input) { setUpdateInput(input.target.value); }}
+          onChange={function (input) {
+            setUpdateInput(input.target.value);
+          }}
         />
       </div>
 
       <table className="table" style={{ marginTop: 10 }}>
         <thead>
           <tr>
-            <th>Items</th>
+            <th>Item</th>
+            <th>Quantity</th>
+            <th>Price</th>
             <th>Status</th>
             <th></th>
             <th></th>
@@ -95,8 +171,7 @@ export default function InventoryManagement() {
           </tr>
         </thead>
         <tbody>
-          {items.map(item => {
-            let publishButton;
+          {Array.isArray(items) && items.map((item) => {let publishButton;
 
             if (item.status === "Published" || item.status === "Pending") {
               publishButton = (
@@ -113,13 +188,49 @@ export default function InventoryManagement() {
                   className="btn btnPrimary"
                   onClick={() => publishItem(item.id)}
                 >
-                    Publish
+                  Publish
                 </button>
               );
             }
+
             return (
               <tr key={item.id}>
                 <td>{item.name}</td>
+                <td>
+                  <input
+                    className="input"
+                    type="number"
+                    value={item.quantity}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+
+                      setItems((items) =>
+                        items.map((i) =>
+                          i.id === item.id ? { ...i, quantity: value } : i
+                        )
+                      );
+                    }}
+                  />
+                </td>
+
+                <td>
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={item.unitPrice}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+
+                      setItems((items) =>
+                        items.map((i) =>
+                          i.id === item.id ? { ...i, unitPrice: value } : i
+                        )
+                      );
+                    }}
+                  />
+                </td>
+
                 <td>{item.status}</td>
 
                 <td>{publishButton}</td>
@@ -153,14 +264,31 @@ export default function InventoryManagement() {
                 className="input"
                 placeholder="New item"
                 value={newItemName}
-                onChange={input => { setNewItemName(input.target.value); }}
+                onChange={(input) => {
+                  setNewItemName(input.target.value);
+                }}
               />
             </td>
+
+            <td>
+              <select
+                className="input"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </td>
+
             <td>
               <button
                 className="btn btnPrimary"
                 onClick={addItem}
-                disabled={!newItemName}
+                disabled={!newItemName || !selectedCategory}
               >
                 Add Item
               </button>
