@@ -107,35 +107,6 @@ export interface OpenAccount {
   createdAt: string;
 }
 
-/** Full account record returned by GET /accounts/search */
-export interface AccountRecord {
-  id:             string;
-  userId:         string;
-  firstName:      string;
-  lastName:       string;
-  type:           string;
-  status:         string;
-  activatedDate:  string | null;
-  suspendedDate:  string | null;
-  closedDate:     string | null;
-  createdAt:      string;
-}
-
-export interface AccountSearchParams {
-  type?:      string;
-  status?:    string;
-  sortBy?:    "activated_date" | "suspended_date" | "closed_date" | "created_at";
-  sortOrder?: "asc" | "desc";
-}
-
-/** Search / filter / sort all accounts — admin only */
-export async function searchAccounts(
-  params: AccountSearchParams = {}
-): Promise<AccountRecord[]> {
-  const { data } = await accountApi.get<AccountRecord[]>("/search", { params });
-  return data;
-}
-
 /** Fetch all accounts with status = 'open' (pending admin approval) */
 export async function fetchOpenAccounts(): Promise<OpenAccount[]> {
   const { data } = await adminApi.get<OpenAccount[]>("/accounts/open");

@@ -93,15 +93,8 @@ router.post("/accounts/decision", async (req: Request, res: Response): Promise<v
 
     // ── 2. Update account status + audit log ─────────────────────────────────
     for (const accountId of accountIds) {
-      // Set the appropriate date column alongside status
-      const dateClause = decision === "approve"
-        ? ", activated_date = NOW()"
-        : decision === "reject"
-        ? ", closed_date = NOW()"
-        : "";
-
       await accountPool.query(
-        `UPDATE account SET status_id = $1, updated_at = NOW()${dateClause} WHERE id = $2`,
+        "UPDATE account SET status_id = $1, updated_at = NOW() WHERE id = $2",
         [statusId, accountId]
       );
 
