@@ -5,8 +5,9 @@ import {
   deleteProduct,
   getCategories,
   getMyProducts,
-  updateProduct,
   Product,
+  updateProduct,
+  updateProductImage,
 } from "../../services/api";
 
 export default function InventoryManagement() {
@@ -14,7 +15,6 @@ export default function InventoryManagement() {
   const [newItemName, setNewItemName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("");
 
@@ -26,15 +26,22 @@ export default function InventoryManagement() {
           getCategories(),
         ]);
 
-        setItems(products || []);
-        setCategories(categoryList);
+        setItems(Array.isArray(products) ? products : []);
+        setCategories(Array.isArray(categoryList) ? categoryList : []);
 
-        if (categoryList.length > 0) {
+        if (Array.isArray(categoryList) && categoryList.length > 0) {
           setSelectedCategory(categoryList[0].id);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        setError("Failed to load inventory data.");
+
+        if (err?.response?.status === 401) {
+          setError("Your session expired. Please log out and sign back in as a seller.");
+        } else {
+          setError("Failed to load inventory data.");
+        }
+
+        setItems([]);
       } finally {
         setLoading(false);
       }
@@ -47,6 +54,8 @@ export default function InventoryManagement() {
     if (!newItemName || !selectedCategory) return;
 
     try {
+      setError("");
+
       const created = await createProduct({
         name: newItemName,
         category: selectedCategory,
@@ -56,20 +65,30 @@ export default function InventoryManagement() {
 
       setItems((prev) => [...prev, created]);
       setNewItemName("");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to create product.");
+
+      if (err?.response?.status === 401) {
+        setError("Your session expired. Please log out and sign back in as a seller.");
+      } else {
+        setError("Failed to create product.");
+      }
     }
   }
 
   async function removeItem(id: string) {
     try {
+      setError("");
       await deleteProduct(id);
-
-      setItems((items) => items.filter((item) => item.id !== id));
-    } catch (err) {
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to remove product.");
+
+      if (err?.response?.status === 401) {
+        setError("Your session expired. Please log out and sign back in as a seller.");
+      } else {
+        setError("Failed to remove product.");
+      }
     }
   }
 
@@ -78,18 +97,41 @@ export default function InventoryManagement() {
     if (!item) return;
 
     try {
+      setError("");
+
       const updated = await updateProduct(id, {
         name: item.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
       });
 
-      setItems((items) =>
-        items.map((i) => (i.id === id ? updated : i))
-      );
-    } catch (err) {
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...updated } : i)));
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to update product.");
+
+      if (err?.response?.status === 401) {
+        setError("Your session expired. Please log out and sign back in as a seller.");
+      } else {
+        setError("Failed to update product.");
+      }
+    }
+  }
+
+  async function saveImage(id: string, imageUrl: string) {
+    try {
+      setError("");
+      await updateProductImage(id, imageUrl);
+      setItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, imageUrl } : item))
+      );
+    } catch (err: any) {
+      console.error(err);
+
+      if (err?.response?.status === 401) {
+        setError("Your session expired. Please log out and sign back in as a seller.");
+      } else {
+        setError("Failed to update image.");
+      }
     }
   }
 
@@ -97,13 +139,57 @@ export default function InventoryManagement() {
     return <div className="card cardPad">Loading inventory...</div>;
   }
 
-  if (error) {
-    return <div className="card cardPad">{error}</div>;
-  }
-
   return (
     <div className="card cardPad">
       <div className="h2">Inventory Management</div>
+
+      {error && (
+        <div style={{ marginTop: 12, marginBottom: 12, color: "red" }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ marginTop: 20, marginBottom: 30 }}>
+        <h3>Product Preview</h3>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+            gap: 20,
+          }}
+        >
+          {items.map((item) => (
+            <div
+              key={item.id}
+              style={{
+                border: "1px solid #131212",
+                borderRadius: 10,
+                padding: 10,
+                background: "#181717",
+              }}
+            >
+              <img
+                src={item.imageUrl || "/images/default-product.png"}
+                alt={item.name}
+                style={{
+                  width: "100%",
+                  height: 150,
+                  objectFit: "cover",
+                  borderRadius: 6,
+                }}
+              />
+
+              <div style={{ fontWeight: 600, marginTop: 10 }}>{item.name}</div>
+              <div style={{ color: "#555", marginTop: 5 }}>Qty: {item.quantity}</div>
+              <div style={{ color: "#1a7f37", fontWeight: 600 }}>
+                ${Number(item.unitPrice).toFixed(2)}
+              </div>
+              <div style={{ fontSize: 12, marginTop: 5 }}>Status: {item.status}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <table className="table" style={{ marginTop: 10 }}>
         <thead>
@@ -121,16 +207,39 @@ export default function InventoryManagement() {
         <tbody>
           {items.map((item) => (
             <tr key={item.id}>
-              <td>
+              <td style={{ minWidth: 180 }}>
                 <img
                   src={item.imageUrl || "/images/default-product.png"}
+                  alt={item.name}
                   style={{
                     width: 60,
                     height: 60,
                     objectFit: "cover",
                     borderRadius: 6,
+                    display: "block",
+                    marginBottom: 6,
                   }}
                 />
+
+                <input
+                  className="input"
+                  placeholder="Image URL"
+                  value={item.imageUrl || ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setItems((prev) =>
+                      prev.map((i) => (i.id === item.id ? { ...i, imageUrl: value } : i))
+                    );
+                  }}
+                />
+
+                <button
+                  className="btn btnPrimary"
+                  style={{ marginTop: 4 }}
+                  onClick={() => saveImage(item.id, item.imageUrl || "")}
+                >
+                  Save Image
+                </button>
               </td>
 
               <td>
@@ -139,11 +248,8 @@ export default function InventoryManagement() {
                   value={item.name}
                   onChange={(e) => {
                     const value = e.target.value;
-
-                    setItems((items) =>
-                      items.map((i) =>
-                        i.id === item.id ? { ...i, name: value } : i
-                      )
+                    setItems((prev) =>
+                      prev.map((i) => (i.id === item.id ? { ...i, name: value } : i))
                     );
                   }}
                 />
@@ -156,11 +262,8 @@ export default function InventoryManagement() {
                   value={item.quantity}
                   onChange={(e) => {
                     const value = Number(e.target.value);
-
-                    setItems((items) =>
-                      items.map((i) =>
-                        i.id === item.id ? { ...i, quantity: value } : i
-                      )
+                    setItems((prev) =>
+                      prev.map((i) => (i.id === item.id ? { ...i, quantity: value } : i))
                     );
                   }}
                 />
@@ -174,11 +277,8 @@ export default function InventoryManagement() {
                   value={item.unitPrice}
                   onChange={(e) => {
                     const value = Number(e.target.value);
-
-                    setItems((items) =>
-                      items.map((i) =>
-                        i.id === item.id ? { ...i, unitPrice: value } : i
-                      )
+                    setItems((prev) =>
+                      prev.map((i) => (i.id === item.id ? { ...i, unitPrice: value } : i))
                     );
                   }}
                 />
@@ -187,19 +287,13 @@ export default function InventoryManagement() {
               <td>{item.status}</td>
 
               <td>
-                <button
-                  className="btn btnPrimary"
-                  onClick={() => updateItem(item.id)}
-                >
+                <button className="btn btnPrimary" onClick={() => updateItem(item.id)}>
                   Update
                 </button>
               </td>
 
               <td>
-                <button
-                  className="btn btnDanger"
-                  onClick={() => removeItem(item.id)}
-                >
+                <button className="btn btnDanger" onClick={() => removeItem(item.id)}>
                   Remove
                 </button>
               </td>
@@ -215,9 +309,7 @@ export default function InventoryManagement() {
                 className="input"
                 placeholder="New item"
                 value={newItemName}
-                onChange={(input) => {
-                  setNewItemName(input.target.value);
-                }}
+                onChange={(e) => setNewItemName(e.target.value)}
               />
             </td>
 
@@ -236,7 +328,6 @@ export default function InventoryManagement() {
             </td>
 
             <td></td>
-
             <td></td>
 
             <td>

@@ -245,6 +245,47 @@ router.patch("/:id", requireAuth, requireRole("seller"), async (req: Request, re
   }
 });
 
+router.patch("/:id/image", requireAuth, requireRole("seller"), async (req: Request, res: Response) => {
+  const pool = getPool();
+  const sellerId = (req as any).user.sub;
+  const productId = req.params.id;
+
+  const { imageUrl } = req.body;
+
+  if (!imageUrl) {
+    res.status(400).json({ error: "imageUrl is required" });
+    return;
+  }
+
+  try {
+    const existing = await pool.query(
+      `SELECT id FROM product WHERE id = $1 AND seller_id = $2`,
+      [productId, sellerId]
+    );
+
+    if (!existing.rowCount) {
+      res.status(404).json({ error: "Product not found" });
+      return;
+    }
+
+    await pool.query(
+      `DELETE FROM product_image WHERE product_id = $1`,
+      [productId]
+    );
+
+    await pool.query(
+      `INSERT INTO product_image (product_id, image_url)
+       VALUES ($1, $2)`,
+      [productId, imageUrl]
+    );
+
+    res.json({ success: true, imageUrl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update image" });
+  }
+});
+
 // Remove product listing
 router.delete("/:id", requireAuth, requireRole("seller"), async (req: Request, res: Response) => {
   const pool = getPool();

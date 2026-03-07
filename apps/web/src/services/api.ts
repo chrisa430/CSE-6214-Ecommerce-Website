@@ -150,6 +150,13 @@ export async function updateProduct(
   return data;
 }
 
+export async function updateProductImage(id: string, imageUrl: string) {
+  const { data } = await inventoryApi.patch(`/products/${id}/image`, {
+    imageUrl,
+  });
+  return data;
+}
+
 export async function deleteProduct(id: string): Promise<void> {
   await inventoryApi.delete(`/products/${id}`);
 }
