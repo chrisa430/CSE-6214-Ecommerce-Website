@@ -13,6 +13,7 @@ import { getPool }                   from "../db/pool";
 import { getAccountPool }            from "../db/accountPool";
 import { publishEvent, TOPICS }      from "../kafka/client";
 import { logger }                    from "../logger";
+import { getInventoryPool }          from "../db/inventoryPool";
 
 const router = Router();
 
@@ -156,6 +157,99 @@ router.post("/accounts/decision", async (req: Request, res: Response): Promise<v
     res.json({ message: `Accounts ${decision}d successfully.`, count: accountIds.length });
   } catch (err) {
     logger.error("Account decision error", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── GET /admin/products/pending ─────────────────────────────────────────────
+router.get("/products/pending", async (_req: Request, res: Response): Promise<void> => {
+  const inventoryPool = getInventoryPool();
+
+  try {
+    const result = await inventoryPool.query(
+      `SELECT
+         p.id,
+         p.name,
+         p.seller_id AS "sellerId",
+         p.short_desc AS "shortDesc",
+         p.long_desc AS "longDesc",
+         p.quantity,
+         p.unit_price AS "unitPrice",
+         pst.name AS status,
+         p.created_at AS "createdAt",
+         COALESCE(
+           (SELECT image_url
+            FROM product_image
+            WHERE product_id = p.id
+            LIMIT 1),
+           '/images/default-product.png'
+         ) AS "imageUrl"
+       FROM product p
+       JOIN product_status_type pst ON pst.id = p.status
+       WHERE pst.name = 'pending'
+       ORDER BY p.created_at ASC`
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    logger.error("Error fetching pending products", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── POST /admin/products/decision ───────────────────────────────────────────
+router.post("/products/decision", async (req: Request, res: Response): Promise<void> => {
+  const { productIds, decision } = req.body as {
+    productIds: string[];
+    decision: "approve" | "reject";
+  };
+
+  if (!Array.isArray(productIds) || productIds.length === 0) {
+    res.status(400).json({ error: "productIds must be a non-empty array." });
+    return;
+  }
+
+  if (decision !== "approve" && decision !== "reject") {
+    res.status(400).json({ error: "decision must be 'approve' or 'reject'." });
+    return;
+  }
+
+  const inventoryPool = getInventoryPool();
+  const newStatus = decision === "approve" ? "active" : "rejected";
+
+  try {
+    const statusRow = await inventoryPool.query(
+      `SELECT id FROM product_status_type WHERE name = $1`,
+      [newStatus]
+    );
+
+    if (!statusRow.rowCount) {
+      res.status(500).json({ error: `Status '${newStatus}' not found in inventory DB.` });
+      return;
+    }
+
+    const statusId = statusRow.rows[0].id as string;
+
+    for (const productId of productIds) {
+      await inventoryPool.query(
+        `UPDATE product
+         SET status = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [statusId, productId]
+      );
+    }
+
+    await publishEvent(TOPICS.ADMIN_EVENTS, "product-decision", {
+      eventType: "PRODUCT_DECISION",
+      decision,
+      productIds,
+      occurredAt: new Date().toISOString(),
+    });
+
+    logger.info(`Admin ${decision}d products: [${productIds.join(", ")}]`);
+    res.json({ message: `Products ${decision}d successfully.`, count: productIds.length });
+  } catch (err) {
+    logger.error("Product decision error", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

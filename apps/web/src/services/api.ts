@@ -175,6 +175,17 @@ export interface OpenAccount {
   createdAt: string;
 }
 
+export interface PendingProduct {
+  id: string;
+  name: string;
+  sellerId: string;
+  quantity: number;
+  unitPrice: number;
+  status: string;
+  imageUrl?: string;
+  createdAt: string;
+}
+
 export async function fetchOpenAccounts(): Promise<OpenAccount[]> {
   const { data } = await adminApi.get<OpenAccount[]>("/accounts/open");
   return data;
@@ -187,6 +198,22 @@ export async function submitAccountDecision(
   const { data } = await adminApi.post<{ message: string; count: number }>(
     "/accounts/decision",
     { accountIds, decision }
+  );
+  return data;
+}
+
+export async function fetchPendingProducts(): Promise<PendingProduct[]> {
+  const { data } = await adminApi.get<PendingProduct[]>("/products/pending");
+  return data;
+}
+
+export async function submitProductDecision(
+  productIds: string[],
+  decision: "approve" | "reject"
+): Promise<{ message: string; count: number }> {
+  const { data } = await adminApi.post<{ message: string; count: number }>(
+    "/products/decision",
+    { productIds, decision }
   );
   return data;
 }
