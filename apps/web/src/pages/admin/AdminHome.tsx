@@ -1,6 +1,36 @@
-import { Link } from "react-router-dom";
+/**
+ * @fileoverview Admin Dashboard Home
+ * @module AdminHome.tsx
+ * @author Darrell Hobson
+ * @Date 2026.03.05
+ *
+ * Admin-only guard — redirects non-admin users to /login.
+ */
+import { useEffect }    from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth }      from "../../context/AuthContext";
 
 export default function AdminHome() {
+  const { user } = useAuth();
+  const navigate  = useNavigate();
+
+  // Admin-only guard
+  useEffect(() => {
+    if (user !== null && user.type !== "admin") {
+      navigate("/login", { replace: true });
+    }
+  }, [user, navigate]);
+
+  if (!user || user.type !== "admin") {
+    return (
+      <div className="card cardPad" style={{ textAlign: "center", padding: 40 }}>
+        <div style={{ fontSize: 44 }}>🚫</div>
+        <div className="h2" style={{ marginTop: 14 }}>Access Denied</div>
+        <p className="muted">This page is restricted to administrator accounts.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="row" style={{ flexWrap: "wrap" }}>
@@ -46,17 +76,17 @@ export default function AdminHome() {
           <ActionCard
             title="Approve / Block Accounts"
             desc="Review new account requests and manage account status."
-            anchor="accounts"
+            anchor="approvals"
+          />
+          <ActionCard
+            title="User Management"
+            desc="Search, filter, and sort all platform users."
+            anchor="users"
           />
           <ActionCard
             title="Moderate Product Listings"
             desc="Approve, block, or remove products from the catalog."
             anchor="products"
-          />
-          <ActionCard
-            title="Facilitate Returns"
-            desc="Resolve disputes and notify buyer/seller outcomes."
-            anchor="returns"
           />
           <ActionCard
             title="View Audit Logs"
@@ -82,19 +112,19 @@ export default function AdminHome() {
           <tbody>
             <tr>
               <td>10:12</td>
-              <td>admin@demo</td>
+              <td>admin@sportvault.com</td>
               <td>APPROVE_ACCOUNT</td>
               <td>seller@demo</td>
             </tr>
             <tr>
               <td>10:31</td>
-              <td>admin@demo</td>
+              <td>admin@sportvault.com</td>
               <td>BLOCK_PRODUCT</td>
               <td>Product #a12</td>
             </tr>
             <tr>
               <td>11:05</td>
-              <td>admin@demo</td>
+              <td>admin@sportvault.com</td>
               <td>RESOLVE_RETURN</td>
               <td>Return #r09</td>
             </tr>
