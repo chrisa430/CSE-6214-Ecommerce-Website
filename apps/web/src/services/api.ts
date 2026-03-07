@@ -10,50 +10,41 @@ const accountApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+const adminApi = axios.create({
+  baseURL: "/api/admin",
+  headers: { "Content-Type": "application/json" },
+});
+
 const inventoryApi = axios.create({
   baseURL: "/api/inventory",
   headers: { "Content-Type": "application/json" },
 });
 
-inventoryApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-export async function getMyProducts(): Promise<Product[]> {
-  const { data } = await inventoryApi.get<Product[]>("/products/mine");
-  return data;
-}
-
-export async function createProduct(payload: CreateProductPayload): Promise<Product> {
-  const { data } = await inventoryApi.post<Product>("/products", payload);
-  return data;
-}
-
-// Attach JWT to every request automatically
-authApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
+// Attach JWT to every authenticated request automatically
+[authApi, accountApi, adminApi, inventoryApi].forEach((instance) => {
+  instance.interceptors.request.use((config) => {
+    const token = localStorage.getItem("accessToken");
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  });
 });
 
 // ── Auth endpoints ──────────────────────────────────────────────────────────
 
 export interface LoginPayload {
-  email:    string;
+  email: string;
   password: string;
 }
 
 export interface LoginResponse {
-  accessToken:  string;
+  accessToken: string;
   refreshToken: string;
   user: {
-    id:        string;
-    email:     string;
+    id: string;
+    email: string;
     firstName: string;
-    lastName:  string;
-    type:      string;
+    lastName: string;
+    type: string;
   };
 }
 
@@ -69,21 +60,21 @@ export async function logoutUser(accountId: string): Promise<void> {
 // ── Account endpoints ───────────────────────────────────────────────────────
 
 export interface RegisterPayload {
-  userId:      string;
-  password:    string;
-  firstName:   string;
-  lastName:    string;
+  userId: string;
+  password: string;
+  firstName: string;
+  lastName: string;
   accountType: "admin" | "buyer" | "seller";
 }
 
 export interface RegisterResponse {
-  message:   string;
+  message: string;
   accountId: string;
   user: {
-    id:        string;
-    email:     string;
+    id: string;
+    email: string;
     firstName: string;
-    lastName:  string;
+    lastName: string;
   };
 }
 
@@ -108,6 +99,8 @@ export function extractApiError(err: unknown): string {
   return "An unexpected error occurred.";
 }
 
+// ── Inventory endpoints ─────────────────────────────────────────────────────
+
 export interface Product {
   id: string;
   name: string;
@@ -131,10 +124,19 @@ export interface CreateProductPayload {
   unitPrice: number;
 }
 
-
 export interface Category {
   id: string;
   name: string;
+}
+
+export async function getMyProducts(): Promise<Product[]> {
+  const { data } = await inventoryApi.get<Product[]>("/products/mine");
+  return data;
+}
+
+export async function createProduct(payload: CreateProductPayload): Promise<Product> {
+  const { data } = await inventoryApi.post<Product>("/products", payload);
+  return data;
 }
 
 export async function getCategories(): Promise<Category[]> {
@@ -159,4 +161,32 @@ export async function updateProductImage(id: string, imageUrl: string) {
 
 export async function deleteProduct(id: string): Promise<void> {
   await inventoryApi.delete(`/products/${id}`);
+}
+
+// ── Admin endpoints ─────────────────────────────────────────────────────────
+
+export interface OpenAccount {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  type: string;
+  status: string;
+  createdAt: string;
+}
+
+export async function fetchOpenAccounts(): Promise<OpenAccount[]> {
+  const { data } = await adminApi.get<OpenAccount[]>("/accounts/open");
+  return data;
+}
+
+export async function submitAccountDecision(
+  accountIds: string[],
+  decision: "approve" | "reject"
+): Promise<{ message: string; count: number }> {
+  const { data } = await adminApi.post<{ message: string; count: number }>(
+    "/accounts/decision",
+    { accountIds, decision }
+  );
+  return data;
 }
