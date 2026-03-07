@@ -2,52 +2,45 @@ import { useEffect, useState } from "react";
 import {
   Category,
   createProduct,
+  deleteProduct,
   getCategories,
   getMyProducts,
   updateProduct,
   Product,
 } from "../../services/api";
 
-
 export default function InventoryManagement() {
   const [items, setItems] = useState<Product[]>([]);
   const [newItemName, setNewItemName] = useState("");
-  const [updateInput, setUpdateInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("");
 
   useEffect(() => {
-  async function loadData() {
-    try {
-      const [products, categoryList] = await Promise.all([
-        getMyProducts(),
-        getCategories(),
-      ]);
+    async function loadData() {
+      try {
+        const [products, categoryList] = await Promise.all([
+          getMyProducts(),
+          getCategories(),
+        ]);
 
-      if (Array.isArray(products)) {
-        setItems(products);
-      } else {
-        console.error("Expected array but got:", products);
-        setItems([]);
-        setError("Products response was not a list.");
-      }
+        setItems(products || []);
+        setCategories(categoryList);
 
-      setCategories(categoryList);
-      if (categoryList.length > 0) {
-        setSelectedCategory(categoryList[0].id);
+        if (categoryList.length > 0) {
+          setSelectedCategory(categoryList[0].id);
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load inventory data.");
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error(err);
-      setItems([]);
-      setError("Failed to load inventory data.");
-    } finally {
-      setLoading(false);
     }
-  }
 
-  loadData();
+    loadData();
   }, []);
 
   async function addItem() {
@@ -69,54 +62,24 @@ export default function InventoryManagement() {
     }
   }
 
-  function removeItem(id: string) {
-    setItems(function (items) {
-      const updatedItems: Product[] = [];
+  async function removeItem(id: string) {
+    try {
+      await deleteProduct(id);
 
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].id !== id) {
-          updatedItems.push(items[i]);
-        }
-      }
-
-      return updatedItems;
-    });
-  }
-
-  function publishItem(id: string) {
-    setItems(function (items) {
-      return items.map(function (item) {
-        if (item.id === id) {
-          return { ...item, status: "Pending" };
-        } else {
-          return item;
-        }
-      });
-    });
-  }
-
-  function unpublishItem(id: string) {
-    setItems(function (items) {
-      return items.map(function (item) {
-        if (item.id === id) {
-          return { ...item, status: "Unpublished" };
-        } else {
-          return item;
-        }
-      });
-    });
+      setItems((items) => items.filter((item) => item.id !== id));
+    } catch (err) {
+      console.error(err);
+      setError("Failed to remove product.");
+    }
   }
 
   async function updateItem(id: string) {
-    if (!updateInput) return;
-
     const item = items.find((i) => i.id === id);
-
     if (!item) return;
 
     try {
       const updated = await updateProduct(id, {
-        name: updateInput,
+        name: item.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
       });
@@ -124,8 +87,6 @@ export default function InventoryManagement() {
       setItems((items) =>
         items.map((i) => (i.id === id ? updated : i))
       );
-
-      setUpdateInput("");
     } catch (err) {
       console.error(err);
       setError("Failed to update product.");
@@ -144,120 +105,110 @@ export default function InventoryManagement() {
     <div className="card cardPad">
       <div className="h2">Inventory Management</div>
 
-      <br />
-      Enter text here to update an item with it:
-      <div style={{ marginBottom: 10 }}>
-        <input
-          type="text"
-          className="input"
-          placeholder="Enter new item name"
-          value={updateInput}
-          onChange={function (input) {
-            setUpdateInput(input.target.value);
-          }}
-        />
-      </div>
-
       <table className="table" style={{ marginTop: 10 }}>
         <thead>
           <tr>
+            <th>Image</th>
             <th>Item</th>
             <th>Quantity</th>
             <th>Price</th>
             <th>Status</th>
             <th></th>
             <th></th>
-            <th></th>
           </tr>
         </thead>
+
         <tbody>
-          {Array.isArray(items) && items.map((item) => {let publishButton;
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td>
+                <img
+                  src={item.imageUrl || "/images/default-product.png"}
+                  style={{
+                    width: 60,
+                    height: 60,
+                    objectFit: "cover",
+                    borderRadius: 6,
+                  }}
+                />
+              </td>
 
-            if (item.status === "Published" || item.status === "Pending") {
-              publishButton = (
+              <td>
+                <input
+                  className="input"
+                  value={item.name}
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    setItems((items) =>
+                      items.map((i) =>
+                        i.id === item.id ? { ...i, name: value } : i
+                      )
+                    );
+                  }}
+                />
+              </td>
+
+              <td>
+                <input
+                  className="input"
+                  type="number"
+                  value={item.quantity}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+
+                    setItems((items) =>
+                      items.map((i) =>
+                        i.id === item.id ? { ...i, quantity: value } : i
+                      )
+                    );
+                  }}
+                />
+              </td>
+
+              <td>
+                <input
+                  className="input"
+                  type="number"
+                  step="0.01"
+                  value={item.unitPrice}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+
+                    setItems((items) =>
+                      items.map((i) =>
+                        i.id === item.id ? { ...i, unitPrice: value } : i
+                      )
+                    );
+                  }}
+                />
+              </td>
+
+              <td>{item.status}</td>
+
+              <td>
                 <button
                   className="btn btnPrimary"
-                  onClick={() => unpublishItem(item.id)}
+                  onClick={() => updateItem(item.id)}
                 >
-                  Unpublish
+                  Update
                 </button>
-              );
-            } else {
-              publishButton = (
+              </td>
+
+              <td>
                 <button
-                  className="btn btnPrimary"
-                  onClick={() => publishItem(item.id)}
+                  className="btn btnDanger"
+                  onClick={() => removeItem(item.id)}
                 >
-                  Publish
+                  Remove
                 </button>
-              );
-            }
-
-            return (
-              <tr key={item.id}>
-                <td>{item.name}</td>
-                <td>
-                  <input
-                    className="input"
-                    type="number"
-                    value={item.quantity}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-
-                      setItems((items) =>
-                        items.map((i) =>
-                          i.id === item.id ? { ...i, quantity: value } : i
-                        )
-                      );
-                    }}
-                  />
-                </td>
-
-                <td>
-                  <input
-                    className="input"
-                    type="number"
-                    step="0.01"
-                    value={item.unitPrice}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-
-                      setItems((items) =>
-                        items.map((i) =>
-                          i.id === item.id ? { ...i, unitPrice: value } : i
-                        )
-                      );
-                    }}
-                  />
-                </td>
-
-                <td>{item.status}</td>
-
-                <td>{publishButton}</td>
-
-                <td>
-                  <button
-                    className="btn btnPrimary"
-                    onClick={() => updateItem(item.id)}
-                    disabled={!updateInput}
-                  >
-                    Update
-                  </button>
-                </td>
-
-                <td>
-                  <button
-                    className="btn btnDanger"
-                    onClick={() => removeItem(item.id)}
-                  >
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
+              </td>
+            </tr>
+          ))}
 
           <tr>
+            <td></td>
+
             <td>
               <input
                 type="text"
@@ -284,6 +235,10 @@ export default function InventoryManagement() {
               </select>
             </td>
 
+            <td></td>
+
+            <td></td>
+
             <td>
               <button
                 className="btn btnPrimary"
@@ -293,6 +248,8 @@ export default function InventoryManagement() {
                 Add Item
               </button>
             </td>
+
+            <td></td>
           </tr>
         </tbody>
       </table>

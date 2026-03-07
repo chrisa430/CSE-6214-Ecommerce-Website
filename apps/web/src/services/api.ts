@@ -116,6 +116,7 @@ export interface Product {
   quantity: number;
   unitPrice: number;
   status: string;
+  imageUrl?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -147,4 +148,8 @@ export async function updateProduct(
 ): Promise<Product> {
   const { data } = await inventoryApi.patch<Product>(`/products/${id}`, payload);
   return data;
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  await inventoryApi.delete(`/products/${id}`);
 }

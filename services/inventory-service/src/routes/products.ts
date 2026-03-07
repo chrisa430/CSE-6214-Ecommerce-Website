@@ -130,19 +130,27 @@ router.get("/mine", requireAuth, requireRole("seller"), async (req: Request, res
   try {
     const result = await pool.query(
       `SELECT
-         p.id,
-         p.name,
-         p.short_desc AS "shortDesc",
-         p.long_desc AS "longDesc",
-         p.quantity,
-         p.unit_price AS "unitPrice",
-         pst.name AS status,
-         p.created_at AS "createdAt",
-         p.updated_at AS "updatedAt"
-       FROM product p
-       LEFT JOIN product_status_type pst ON pst.id = p.status
-       WHERE p.seller_id = $1
-       ORDER BY p.created_at DESC`,
+        p.id,
+        p.name,
+        p.short_desc AS "shortDesc",
+        p.long_desc AS "longDesc",
+        p.quantity,
+        p.unit_price AS "unitPrice",
+        pst.name AS status,
+        p.created_at AS "createdAt",
+        p.updated_at AS "updatedAt",
+        COALESCE(
+            (SELECT image_url
+            FROM product_image
+            WHERE product_id = p.id
+            LIMIT 1),
+            '/images/default-product.png'
+        ) AS "imageUrl"
+        FROM product p
+        LEFT JOIN product_status_type pst ON pst.id = p.status
+        WHERE p.seller_id = $1
+        AND pst.name != 'removed'
+        ORDER BY p.created_at DESC`,
       [sellerId]
     );
 
