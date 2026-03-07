@@ -13,6 +13,9 @@ import {
 export default function InventoryManagement() {
   const [items, setItems] = useState<Product[]>([]);
   const [newItemName, setNewItemName] = useState("");
+  const [newQuantity, setNewQuantity] = useState(0);
+  const [newPrice, setNewPrice] = useState(0);
+  const [newImageUrl, setNewImageUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -59,12 +62,21 @@ export default function InventoryManagement() {
       const created = await createProduct({
         name: newItemName,
         category: selectedCategory,
-        quantity: 0,
-        unitPrice: 0,
+        quantity: newQuantity,
+        unitPrice: newPrice,
       });
 
+      if (newImageUrl) {
+        await updateProductImage(created.id, newImageUrl);
+        created.imageUrl = newImageUrl;
+      }
+
       setItems((prev) => [...prev, created]);
+
       setNewItemName("");
+      setNewQuantity(0);
+      setNewPrice(0);
+      setNewImageUrl("");
     } catch (err: any) {
       console.error(err);
 
@@ -198,7 +210,7 @@ export default function InventoryManagement() {
             <th>Item</th>
             <th>Quantity</th>
             <th>Price</th>
-            <th>Status</th>
+            <th>Status / Category</th>
             <th></th>
             <th></th>
           </tr>
@@ -301,15 +313,43 @@ export default function InventoryManagement() {
           ))}
 
           <tr>
-            <td></td>
+            <td>
+              <input
+                className="input"
+                placeholder="Image URL"
+                value={newImageUrl}
+                onChange={(e) => setNewImageUrl(e.target.value)}
+              />
+            </td>
 
             <td>
               <input
                 type="text"
                 className="input"
-                placeholder="New item"
+                placeholder="Item name"
                 value={newItemName}
                 onChange={(e) => setNewItemName(e.target.value)}
+              />
+            </td>
+
+            <td>
+              <input
+                type="number"
+                className="input"
+                placeholder="Quantity"
+                value={newQuantity}
+                onChange={(e) => setNewQuantity(Number(e.target.value))}
+              />
+            </td>
+
+            <td>
+              <input
+                type="number"
+                step="0.01"
+                className="input"
+                placeholder="Price"
+                value={newPrice}
+                onChange={(e) => setNewPrice(Number(e.target.value))}
               />
             </td>
 
@@ -326,9 +366,6 @@ export default function InventoryManagement() {
                 ))}
               </select>
             </td>
-
-            <td></td>
-            <td></td>
 
             <td>
               <button

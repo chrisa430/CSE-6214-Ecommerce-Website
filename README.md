@@ -43,7 +43,7 @@ to ensure that all micro services and database tables are deployed programmatica
 2. docker compose up
 3. npm run dev -w services/account-service
 4. npm run dev -w services/authn-authz-service
-5. npm run dev -w services/admin-services
+5. npm run dev -w services/admin-service
 6. npm run dev -w services/inventory-service
 7. cd apps/web npm run dev
 
