@@ -6,7 +6,7 @@
  */
 import { Router, Request, Response } from "express";
 import bcrypt from "bcrypt";
-import fetch from "node-fetch"; // Node 18+ has built-in fetch
+// import fetch from "node-fetch"; // Node 18+ has built-in fetch
 import {
   signAccessToken,
   signRefreshToken,
