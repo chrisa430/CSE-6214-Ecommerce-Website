@@ -43,8 +43,9 @@ to ensure that all micro services and database tables are deployed programmatica
 2. docker compose up
 3. npm run dev -w services/account-service
 4. npm run dev -w services/authn-authz-service
-5. npm run dev -w services/admin-services
-6. npm run dev -v apps/web
+5. npm run dev -w services/admin-service
+6. npm run dev -w services/inventory-service
+7. cd apps/web npm run dev
 
 ## Create Admin User
 When you recreate the environment, you will have to insert an admin record into the account table or else you will not be able to create accounts since the admin has to approve account creation. Kind of a Catch-22.

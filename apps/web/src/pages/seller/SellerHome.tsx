@@ -39,11 +39,9 @@ export default function SellerHome() {
             desc="Search for products and directly compare them to each other."
             anchor="search"
           />
-          <ActionCard
-            title="Manage Inventory"
-            desc="Review details of your past orders."
-            anchor="inventory"
-          />
+          <Link className="btn btnPrimary" to="/seller/inventory">
+            Open Inventory Manager
+          </Link>
           <ActionCard
             title="Returns"
             desc="See returns for your products initiated by buyers."

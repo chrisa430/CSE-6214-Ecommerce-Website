@@ -15,8 +15,13 @@ const adminApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+const inventoryApi = axios.create({
+  baseURL: "/api/inventory",
+  headers: { "Content-Type": "application/json" },
+});
+
 // Attach JWT to every authenticated request automatically
-[authApi, accountApi, adminApi].forEach((instance) => {
+[authApi, accountApi, adminApi, inventoryApi].forEach((instance) => {
   instance.interceptors.request.use((config) => {
     const token = localStorage.getItem("accessToken");
     if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -27,19 +32,19 @@ const adminApi = axios.create({
 // ── Auth endpoints ──────────────────────────────────────────────────────────
 
 export interface LoginPayload {
-  email:    string;
+  email: string;
   password: string;
 }
 
 export interface LoginResponse {
-  accessToken:  string;
+  accessToken: string;
   refreshToken: string;
   user: {
-    id:        string;
-    email:     string;
+    id: string;
+    email: string;
     firstName: string;
-    lastName:  string;
-    type:      string;
+    lastName: string;
+    type: string;
   };
 }
 
@@ -55,21 +60,21 @@ export async function logoutUser(accountId: string): Promise<void> {
 // ── Account endpoints ───────────────────────────────────────────────────────
 
 export interface RegisterPayload {
-  userId:      string;
-  password:    string;
-  firstName:   string;
-  lastName:    string;
+  userId: string;
+  password: string;
+  firstName: string;
+  lastName: string;
   accountType: "admin" | "buyer" | "seller";
 }
 
 export interface RegisterResponse {
-  message:   string;
+  message: string;
   accountId: string;
   user: {
-    id:        string;
-    email:     string;
+    id: string;
+    email: string;
     firstName: string;
-    lastName:  string;
+    lastName: string;
   };
 }
 
@@ -94,33 +99,121 @@ export function extractApiError(err: unknown): string {
   return "An unexpected error occurred.";
 }
 
+// ── Inventory endpoints ─────────────────────────────────────────────────────
+
+export interface Product {
+  id: string;
+  name: string;
+  shortDesc?: string;
+  longDesc?: string;
+  quantity: number;
+  unitPrice: number;
+  status: string;
+  imageUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateProductPayload {
+  name: string;
+  shortDesc?: string;
+  longDesc?: string;
+  category: string;
+  subCategory?: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+}
+
+export async function getMyProducts(): Promise<Product[]> {
+  const { data } = await inventoryApi.get<Product[]>("/products/mine");
+  return data;
+}
+
+export async function createProduct(payload: CreateProductPayload): Promise<Product> {
+  const { data } = await inventoryApi.post<Product>("/products", payload);
+  return data;
+}
+
+export async function getCategories(): Promise<Category[]> {
+  const { data } = await inventoryApi.get<Category[]>("/products/categories");
+  return data;
+}
+
+export async function updateProduct(
+  id: string,
+  payload: Partial<CreateProductPayload>
+): Promise<Product> {
+  const { data } = await inventoryApi.patch<Product>(`/products/${id}`, payload);
+  return data;
+}
+
+export async function updateProductImage(id: string, imageUrl: string) {
+  const { data } = await inventoryApi.patch(`/products/${id}/image`, {
+    imageUrl,
+  });
+  return data;
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  await inventoryApi.delete(`/products/${id}`);
+}
+
 // ── Admin endpoints ─────────────────────────────────────────────────────────
 
-/** Shape of an account record returned by GET /admin/accounts/open */
 export interface OpenAccount {
-  id:        string;
-  email:     string;
+  id: string;
+  email: string;
   firstName: string;
-  lastName:  string;
-  type:      string;
-  status:    string;
+  lastName: string;
+  type: string;
+  status: string;
   createdAt: string;
 }
 
-/** Fetch all accounts with status = 'open' (pending admin approval) */
+export interface PendingProduct {
+  id: string;
+  name: string;
+  sellerId: string;
+  quantity: number;
+  unitPrice: number;
+  status: string;
+  imageUrl?: string;
+  createdAt: string;
+}
+
 export async function fetchOpenAccounts(): Promise<OpenAccount[]> {
   const { data } = await adminApi.get<OpenAccount[]>("/accounts/open");
   return data;
 }
 
-/** Bulk approve or reject open account requests */
 export async function submitAccountDecision(
   accountIds: string[],
-  decision:   "approve" | "reject"
+  decision: "approve" | "reject"
 ): Promise<{ message: string; count: number }> {
   const { data } = await adminApi.post<{ message: string; count: number }>(
     "/accounts/decision",
     { accountIds, decision }
+  );
+  return data;
+}
+
+export async function fetchPendingProducts(): Promise<PendingProduct[]> {
+  const { data } = await adminApi.get<PendingProduct[]>("/products/pending");
+  return data;
+}
+
+export async function submitProductDecision(
+  productIds: string[],
+  decision: "approve" | "reject"
+): Promise<{ message: string; count: number }> {
+  const { data } = await adminApi.post<{ message: string; count: number }>(
+    "/products/decision",
+    { productIds, decision }
   );
   return data;
 }

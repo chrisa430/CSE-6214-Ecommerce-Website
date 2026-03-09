@@ -14,8 +14,11 @@ import { useNavigate }                       from "react-router-dom";
 import { useAuth }                           from "../../context/AuthContext";
 import {
   fetchOpenAccounts,
+  fetchPendingProducts,
   submitAccountDecision,
+  submitProductDecision,
   OpenAccount,
+  PendingProduct,
   extractApiError,
 } from "../../services/api";
 
@@ -55,25 +58,7 @@ export default function AdminSubpage() {
       <AccountApprovalsSection />
 
       {/* ── Product moderation ────────────────────────────────────────────── */}
-      <Section id="products" title="Product Moderation (REQ-047 / REQ-048 / REQ-049)">
-        <div className="divider" />
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Product</th><th>Seller</th><th>Status</th><th>Submitted</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Signed Jersey</td><td>seller@demo</td><td>Pending</td><td>2026-02-17</td>
-              <td>
-                <button className="btn btnPrimary">Approve</button>{" "}
-                <button className="btn btnDanger">Block</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </Section>
+      <ProductModerationSection />
 
       {/* ── Return facilitation ───────────────────────────────────────────── */}
       <Section id="returns" title="Return Facilitation (REQ-082)">
@@ -316,6 +301,233 @@ function AccountApprovalsSection() {
           >
             <span className="muted" style={{ fontSize: 13, flex: 1 }}>
               {selected.size} of {accounts.length} row{accounts.length !== 1 ? "s" : ""} selected
+            </span>
+            <button
+              className="btn btnDanger"
+              disabled={submitting || selected.size === 0}
+              onClick={() => handleDecision("reject")}
+            >
+              {submitting ? "Processing…" : "Reject Selected"}
+            </button>
+            <button
+              className="btn btnPrimary"
+              disabled={submitting || selected.size === 0}
+              onClick={() => handleDecision("approve")}
+            >
+              {submitting ? "Processing…" : "Approve Selected"}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ProductModerationSection() {
+  const [products, setProducts] = useState<PendingProduct[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<
+    { kind: "success" | "error"; msg: string } | null
+  >(null);
+
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    setFeedback(null);
+    setSelected(new Set());
+
+    try {
+      const data = await fetchPendingProducts();
+      setProducts(data);
+    } catch (err) {
+      setFeedback({ kind: "error", msg: extractApiError(err) });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  function toggleRow(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected(
+      selected.size === products.length
+        ? new Set()
+        : new Set(products.map((p) => p.id))
+    );
+  }
+
+  async function handleDecision(decision: "approve" | "reject") {
+    if (selected.size === 0) {
+      setFeedback({ kind: "error", msg: "Select at least one product row first." });
+      return;
+    }
+
+    setSubmitting(true);
+    setFeedback(null);
+
+    try {
+      const result = await submitProductDecision([...selected], decision);
+      setFeedback({ kind: "success", msg: result.message });
+      await loadProducts();
+    } catch (err) {
+      setFeedback({ kind: "error", msg: extractApiError(err) });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const allSelected = products.length > 0 && selected.size === products.length;
+
+  return (
+    <section id="products" className="card cardPad">
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 10,
+        }}
+      >
+        <div className="h2">Product Moderation (REQ-047 / REQ-048 / REQ-049)</div>
+        <button className="btn" onClick={loadProducts} disabled={loading || submitting}>
+          ↻ Refresh
+        </button>
+      </div>
+
+      {feedback && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 14px",
+            borderRadius: 10,
+            fontSize: 13,
+            background:
+              feedback.kind === "success"
+                ? "rgba(34,197,94,0.12)"
+                : "rgba(239,68,68,0.12)",
+            border: `1px solid ${
+              feedback.kind === "success"
+                ? "rgba(34,197,94,0.4)"
+                : "rgba(239,68,68,0.4)"
+            }`,
+            color: feedback.kind === "success" ? "#22c55e" : "var(--danger)",
+          }}
+        >
+          {feedback.msg}
+        </div>
+      )}
+
+      <div className="divider" />
+
+      {loading ? (
+        <p className="muted" style={{ textAlign: "center", padding: 24 }}>
+          Loading pending products…
+        </p>
+      ) : products.length === 0 ? (
+        <p className="muted" style={{ textAlign: "center", padding: 24 }}>
+          ✅ No products pending approval.
+        </p>
+      ) : (
+        <>
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{ width: 36 }}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    title={allSelected ? "Deselect all" : "Select all"}
+                  />
+                </th>
+                <th>Image</th>
+                <th>Product</th>
+                <th>Seller ID</th>
+                <th>Quantity</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((product) => {
+                const isSelected = selected.has(product.id);
+
+                return (
+                  <tr
+                    key={product.id}
+                    onClick={() => toggleRow(product.id)}
+                    style={{
+                      cursor: "pointer",
+                      background: isSelected
+                        ? "rgba(124,92,255,0.12)"
+                        : undefined,
+                    }}
+                  >
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleRow(product.id)}
+                      />
+                    </td>
+                    <td>
+                      <img
+                        src={product.imageUrl || "/images/default-product.png"}
+                        alt={product.name}
+                        style={{ width: 50, height: 50, objectFit: "cover", borderRadius: 6 }}
+                      />
+                    </td>
+                    <td>{product.name}</td>
+                    <td>{product.sellerId}</td>
+                    <td>{product.quantity}</td>
+                    <td>${Number(product.unitPrice).toFixed(2)}</td>
+                    <td>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "2px 10px",
+                          borderRadius: 20,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: "rgba(251,191,36,0.18)",
+                          color: "#fbbf24",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {product.status}
+                      </span>
+                    </td>
+                    <td>{new Date(product.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <span className="muted" style={{ fontSize: 13, flex: 1 }}>
+              {selected.size} of {products.length} row{products.length !== 1 ? "s" : ""} selected
             </span>
             <button
               className="btn btnDanger"

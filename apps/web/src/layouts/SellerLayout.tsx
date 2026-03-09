@@ -31,7 +31,8 @@ export default function SellerLayout() {
 
           <nav className="col" style={{ gap: 10 }}>
             <NavItem to="/seller">Dashboard</NavItem>
-            <NavItem to="/seller/subpage">My Listings</NavItem>
+            <NavItem to="/seller/inventory">Inventory</NavItem>
+            <NavItem to="/seller/subpage">Seller Actions</NavItem>
           </nav>
 
           <div style={{ flex: 1 }} />
