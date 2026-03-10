@@ -34,9 +34,28 @@ This repository contains the source code, documentation, and requirements artifa
 ---
 
 ## Installation
-The application can be deployed as containers in Docker. The docker-compose.yml file contains the Docker configuration.
+The development can be deployed as Docker Containers. The docker-compose.yml file contains the Docker configuration. Each time a new feature is applied, you should blow away the previous Docker environment  
+to ensure that all micro services and database tables are deployed programmatically via the sql scriptas in the database directory. The scripts build each database and inserts test data (except for a default admin user see below)
 
-1. docker compose up
-2. npm run dev -w services/account-service
-3. npm run dev -w services/authn-authz-service
-4. npm run dev -v apps/web
+### Rebuild Container Environment
+
+1. docker compose down -v    # -v destroys volumes so init.sql reruns
+2. docker compose up
+3. npm run dev -w services/account-service
+4. npm run dev -w services/authn-authz-service
+5. npm run dev -w services/admin-services
+6. npm run dev -v apps/web
+
+## Create Admin User
+When you recreate the environment, you will have to insert an admin record into the account table or else you will not be able to create accounts since the admin has to approve account creation. Kind of a Catch-22.
+
+### seed-admin.ts
+1. Update ADMIN_EMAIL (line 26) with your email address
+2. Update ADMIN_PASSWORD (line 27) with a valid password.
+3. change to the scripts directory
+4. npm install
+5. npx ts-node seed-admin.ts
+
+## Notes
+### Email Notifications
+In the current dev setup emails won't arrive in a real inbox. Instead the AdminService sends emails via Ethereal, a fake SMTP service used to test email functionality. The AdminService logs will have a link to the "email". Copy and

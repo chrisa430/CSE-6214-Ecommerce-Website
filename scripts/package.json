@@ -4,11 +4,14 @@
   "description": "Utility seed scripts for SportVault",
   "private": true,
   "scripts": {
-    "seed:admin": "npx ts-node seed-admin.ts"
+    "seed:admin": "npx ts-node seed-admin.ts",
+    "seed:users": "npx ts-node seed-users.ts",
+    "seed:all": "npx ts-node seed-all.ts"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
-    "pg": "^8.12.0"
+    "pg": "^8.12.0",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
