@@ -18,6 +18,7 @@ import SellerLayout  from "./layouts/SellerLayout";
 import SellerHome    from "./pages/seller/SellerHome";
 import SellerSubpage from "./pages/seller/SellerSubpage";
 import InventoryManagement from "./pages/seller/InventoryManagement";
+import SellerProfile from "./pages/seller/SellerProfile";
 
 export const router = createBrowserRouter([
   { path: "/",        element: <Navigate to="/login" replace /> },
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
       { index: true,          element: <SellerHome /> },
       { path: "subpage",      element: <SellerSubpage /> },
       { path: "inventory", element: <InventoryManagement /> },
+      { path: "profile", element: <SellerProfile /> },
     ],
   },
 ]);

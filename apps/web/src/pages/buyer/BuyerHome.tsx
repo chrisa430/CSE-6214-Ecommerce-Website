@@ -75,7 +75,7 @@ export default function BuyerHome() {
               style={{
                 width: "100%",
                 height: 180,
-                objectFit: "cover",
+                objectFit: "contain",
                 borderRadius: 8,
               }}
             />

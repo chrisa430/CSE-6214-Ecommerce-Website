@@ -187,8 +187,9 @@ export default function InventoryManagement() {
                 style={{
                   width: "100%",
                   height: 150,
-                  objectFit: "cover",
+                  objectFit: "contain",
                   borderRadius: 6,
+                  background: "#222"
                 }}
               />
 
@@ -226,10 +227,11 @@ export default function InventoryManagement() {
                   style={{
                     width: 60,
                     height: 60,
-                    objectFit: "cover",
+                    objectFit: "contain",
                     borderRadius: 6,
                     display: "block",
                     marginBottom: 6,
+                    background: "#222"
                   }}
                 />
 
