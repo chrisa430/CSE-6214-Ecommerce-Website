@@ -12,6 +12,7 @@ import BuyerHome     from "./pages/buyer/BuyerHome";
 import BuyerSubpage  from "./pages/buyer/BuyerSubpage";
 import BuyerCart from "./pages/buyer/BuyerCart";
 import BuyerCheckout from "./pages/buyer/BuyerCheckout";
+import BuyerProfile from "./pages/buyer/BuyerProfile";
 
 import SellerLayout  from "./layouts/SellerLayout";
 import SellerHome    from "./pages/seller/SellerHome";
@@ -40,6 +41,8 @@ export const router = createBrowserRouter([
       { path: "subpage",      element: <BuyerSubpage /> },
       { path: "cart", element: <BuyerCart /> },
       { path: "checkout", element: <BuyerCheckout /> },
+      { path: "profile", element: <BuyerProfile /> },
+
     ],
   },
 

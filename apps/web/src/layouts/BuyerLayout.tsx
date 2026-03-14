@@ -27,6 +27,7 @@ export default function BuyerLayout() {
             <div className="divider" />
 
             <nav className="col" style={{ gap: 10 }}>
+              <NavItem to="/buyer/profile">Account Profile</NavItem>
               <NavItem to="/buyer">Browse Products</NavItem>
               <NavItem to="/buyer/cart">Shopping Cart</NavItem>
               <NavItem to="/buyer/checkout">Checkout</NavItem>
