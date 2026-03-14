@@ -1,84 +1,113 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { addToCart, getActiveProducts, Product } from "../../services/api";
 
 export default function BuyerHome() {
-  return (
-      <div className="col" style={{ gap: 16 }}>
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          <div className="card cardPad">
-            <div> Welcome, User!</div>
-            <br></br>
-          </div>
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
-          <div className="card cardPad">
-            <div>Below are actions you can take as a buyer:</div>
-            <br></br>
-          </div>
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        const data = await getActiveProducts();
+        setProducts(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load products.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProducts();
+  }, []);
+
+  const filteredProducts = products.filter((product) =>
+    product.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (loading) {
+    return <div className="card cardPad">Loading products...</div>;
+  }
+
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="card cardPad">
+        <div className="h2">Browse Products</div>
+        <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+          View approved memorabilia available for purchase.
         </div>
 
-        <div className="card cardPad">
-          <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
-            <div className="col" style={{ gap: 4 }}>
-              <div className="h2">Options:</div>
+        <div style={{ marginTop: 14 }}>
+          <input
+            className="input"
+            type="text"
+            placeholder="Search products"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {error && (
+          <div style={{ marginTop: 12, color: "red" }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+          gap: 20,
+        }}
+      >
+        {filteredProducts.map((product) => (
+          <div
+            key={product.id}
+            className="card cardPad"
+            style={{ display: "flex", flexDirection: "column", gap: 10 }}
+          >
+            <img
+              src={product.imageUrl || "/images/default-product.png"}
+              alt={product.name}
+              style={{
+                width: "100%",
+                height: 180,
+                objectFit: "cover",
+                borderRadius: 8,
+              }}
+            />
+
+            <div className="h2" style={{ fontSize: 18 }}>
+              {product.name}
             </div>
 
-            <Link className="btn btnPrimary" to="/buyer/subpage">
-              Open Buyer Actions
-            </Link>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {product.shortDesc || "Sports memorabilia listing"}
+            </div>
+
+            <div style={{ fontWeight: 700 }}>
+              ${Number(product.unitPrice).toFixed(2)}
+            </div>
+
+            <div className="muted" style={{ fontSize: 12 }}>
+              In stock: {product.quantity}
+            </div>
+
+            <button
+              className="btn btnPrimary"
+              onClick={() => {
+                addToCart(product);
+                alert(`${product.name} added to cart`);
+              }}
+            >
+              Add to Cart
+            </button>
           </div>
-
-          <div className="divider" />
-
-          <div className="row" style={{ flexWrap: "wrap" }}>
-            <ActionCard //REQ-012 Update Account Details (Buyer)
-                title="Update Account Details"
-                desc="Update personal information and payment details."
-                anchor="account"
-            />
-            <ActionCard //REQ-029 Initiate Product Comparison (Buyer)
-                title="Search and Compare"
-                desc="Search for products and directly compare them to each other."
-                anchor="search"
-            />
-            <ActionCard //REQ-035 Show Order History (Buyer)
-                title="Order History"
-                desc="Review details of your past orders."
-                anchor="orders"
-            />
-            <ActionCard //REQ-036 Initiate Product Return (Buyer)
-                title="Returns"
-                desc="Initiate returns and check status of existing returns."
-                anchor="returns"
-            />
-              <ActionCard //REQ-022B Password Reset (Buyer)
-                  title="Reset Password"
-                  desc="Reset your SportsVault password."
-                  anchor="password"
-              />
-
-              <ActionCard //REQ-079 Close Account (Buyer)
-                  title="Close SportsVault Account"
-                  desc="Close your SportsVault account and remove all associated data."
-                  anchor="closeAccount"
-              />
-          </div>
-        </div>
+        ))}
       </div>
+    </div>
   );
 }
-
-function ActionCard({ title, desc, anchor }: { title: string; desc: string; anchor: string }) {
-  return (
-      <div className="card cardPad" style={{ flex: 1, minWidth: 220 }}>
-        <div className="h2">{title}</div>
-        <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-          {desc}
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <Link className="btn" to={`/buyer/subpage#${anchor}`}>
-            Open
-          </Link>
-        </div>
-      </div>
-  );
-}
-

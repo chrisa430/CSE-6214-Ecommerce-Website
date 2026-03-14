@@ -10,6 +10,8 @@ import AdminSubpage  from "./pages/admin/AdminSubpage";
 import BuyerLayout   from "./layouts/BuyerLayout";
 import BuyerHome     from "./pages/buyer/BuyerHome";
 import BuyerSubpage  from "./pages/buyer/BuyerSubpage";
+import BuyerCart from "./pages/buyer/BuyerCart";
+import BuyerCheckout from "./pages/buyer/BuyerCheckout";
 
 import SellerLayout  from "./layouts/SellerLayout";
 import SellerHome    from "./pages/seller/SellerHome";
@@ -36,6 +38,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true,          element: <BuyerHome /> },
       { path: "subpage",      element: <BuyerSubpage /> },
+      { path: "cart", element: <BuyerCart /> },
+      { path: "checkout", element: <BuyerCheckout /> },
     ],
   },
 

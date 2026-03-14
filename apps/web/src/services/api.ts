@@ -163,6 +163,11 @@ export async function deleteProduct(id: string): Promise<void> {
   await inventoryApi.delete(`/products/${id}`);
 }
 
+export async function getActiveProducts(): Promise<Product[]> {
+  const { data } = await inventoryApi.get<Product[]>("/products/active");
+  return data;
+}
+
 // ── Admin endpoints ─────────────────────────────────────────────────────────
 
 export interface OpenAccount {
@@ -216,4 +221,56 @@ export async function submitProductDecision(
     { productIds, decision }
   );
   return data;
+}
+
+// ── Shopping Cart ─────────────────────────────────────────────────────────
+
+export interface CartItem {
+  productId: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  imageUrl?: string;
+}
+
+const CART_KEY = "buyerCart";
+
+export function getCart(): CartItem[] {
+  const raw = localStorage.getItem(CART_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCart(items: CartItem[]): void {
+  localStorage.setItem(CART_KEY, JSON.stringify(items));
+}
+
+export function addToCart(product: Product): void {
+  const cart = getCart();
+  const existing = cart.find((item) => item.productId === product.id);
+
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    cart.push({
+      productId: product.id,
+      name: product.name,
+      unitPrice: product.unitPrice,
+      quantity: 1,
+      imageUrl: product.imageUrl,
+    });
+  }
+
+  saveCart(cart);
+}
+
+export function removeFromCart(productId: string): void {
+  const cart = getCart().filter((item) => item.productId !== productId);
+  saveCart(cart);
 }
