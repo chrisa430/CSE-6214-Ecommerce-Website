@@ -122,6 +122,42 @@ router.post("/", requireAuth, requireRole("seller"), async (req: Request, res: R
   }
 });
 
+router.get("/active", async (_req: Request, res: Response) => {
+  const pool = getPool();
+
+  try {
+    const result = await pool.query(
+      `SELECT
+        p.id,
+        p.name,
+        p.short_desc AS "shortDesc",
+        p.long_desc AS "longDesc",
+        p.quantity,
+        p.unit_price AS "unitPrice",
+        pst.name AS status,
+        p.created_at AS "createdAt",
+        p.updated_at AS "updatedAt",
+        COALESCE(
+          (SELECT image_url
+           FROM product_image
+           WHERE product_id = p.id
+           LIMIT 1),
+          '/images/default-product.png'
+        ) AS "imageUrl"
+       FROM product p
+       JOIN product_status_type pst ON pst.id = p.status
+       WHERE pst.name = 'active'
+         AND p.quantity > 0
+       ORDER BY p.created_at DESC`
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Get my products
 router.get("/mine", requireAuth, requireRole("seller"), async (req: Request, res: Response) => {
   const pool = getPool();

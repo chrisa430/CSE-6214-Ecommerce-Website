@@ -1,69 +1,40 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 export default function SellerHome() {
+  const { user } = useAuth();
+
   return (
     <div className="col" style={{ gap: 16 }}>
-      <div className="row" style={{ flexWrap: "wrap" }}>
-        <div className="card cardPad">
-          <div> Welcome, User!</div>
-            <br></br>
-        </div>
-
-        <div className="card cardPad">
-          <div>Below are actions you can take as a seller:</div>
-            <br></br>
-        </div>
-      </div>
-
       <div className="card cardPad">
-        <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
-          <div className="col" style={{ gap: 4 }}>
-            <div className="h2">Options:</div>
+        <div className="h2">
+          Welcome{user ? `, ${user.firstName}` : ""}!
+        </div>
+        <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+          This is your seller dashboard. Use the inventory manager to create listings,
+          update product details, upload images, and remove listings.
+        </div>
+      </div>
+
+      <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
+        <div className="card cardPad" style={{ flex: 1, minWidth: 240 }}>
+          <div className="h2">Inventory Manager</div>
+          <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+            Create products, edit names, prices, quantities, and product images.
           </div>
-
-          <Link className="btn btnPrimary" to="/seller/subpage">
-            Open Seller Actions
-          </Link>
+          <div style={{ marginTop: 14 }}>
+            <Link className="btn btnPrimary" to="/seller/inventory">
+              Open Inventory
+            </Link>
+          </div>
         </div>
 
-        <div className="divider" />
-
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          <ActionCard
-            title="Update Account Details"
-            desc="Update personal information and payment details."
-            anchor="account"
-          />
-          <ActionCard
-            title="Search and Compare"
-            desc="Search for products and directly compare them to each other."
-            anchor="search"
-          />
-          <Link className="btn btnPrimary" to="/seller/inventory">
-            Open Inventory Manager
-          </Link>
-          <ActionCard
-            title="Returns"
-            desc="See returns for your products initiated by buyers."
-            anchor="returns"
-          />
+        <div className="card cardPad" style={{ flex: 1, minWidth: 240 }}>
+          <div className="h2">Approval Workflow</div>
+          <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+            Newly created or updated listings go to pending status until an admin approves them.
+          </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ActionCard({ title, desc, anchor }: { title: string; desc: string; anchor: string }) {
-  return (
-    <div className="card cardPad" style={{ flex: 1, minWidth: 220 }}>
-      <div className="h2">{title}</div>
-      <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-        {desc}
-      </div>
-      <div style={{ marginTop: 14 }}>
-        <Link className="btn" to={`/seller/subpage#${anchor}`}>
-          Open
-        </Link>
       </div>
     </div>
   );

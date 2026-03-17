@@ -15,7 +15,6 @@ This repository contains the source code, documentation, and requirements artifa
 | Christopher Argyros | ca1434 | Frontend Development, UI Integration & QA |
 | Wyatt Carter | wac224 | Documentation, SRS, Requirements & QA |
 | Darrell Hobson | dlh224 | Backend Development, API Design & QA |
-| Brian Romoser | bmr440 | Database Design & QA |
 
 ---
 

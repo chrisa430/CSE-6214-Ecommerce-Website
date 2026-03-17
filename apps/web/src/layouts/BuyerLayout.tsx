@@ -19,7 +19,7 @@ export default function BuyerLayout() {
                 <div className="badge">SportVault • Buyer</div>
                 <div className="h2">User Account</div>
                 <div className="muted" style={{ fontSize: 13 }}>
-                  Manage account profile, security, purchases, and returns.
+                  Browse approved products, manage your cart, and review checkout totals.
                 </div>
               </div>
             </div>
@@ -27,11 +27,10 @@ export default function BuyerLayout() {
             <div className="divider" />
 
             <nav className="col" style={{ gap: 10 }}>
-              <NavItem to="/buyer/subpage">Account Profile</NavItem>
-              <NavItem to="/buyer/subpage#security">Security</NavItem>
-              <NavItem to="/buyer/subpage#purchases">Purchases</NavItem>
-              <NavItem to="/buyer/subpage#returns">Returns</NavItem>
-              <NavItem to="/buyer/subpage#closeAccount">Close Account</NavItem>
+              <NavItem to="/buyer/profile">Account Profile</NavItem>
+              <NavItem to="/buyer">Browse Products</NavItem>
+              <NavItem to="/buyer/cart">Shopping Cart</NavItem>
+              <NavItem to="/buyer/checkout">Checkout</NavItem>
             </nav>
 
             <div style={{ flex: 1 }} />
