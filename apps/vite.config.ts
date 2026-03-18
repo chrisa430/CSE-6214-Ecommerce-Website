@@ -23,6 +23,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/inventory/, "/inventory"),
       },
+      "/api/cart": {
+        target: "http://localhost:3005",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/cart/, "/cart"),
+      },
+      "/api/orders": {
+        target: "http://localhost:3006",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/orders/, "/orders"),
+      },
     },
   },
 });

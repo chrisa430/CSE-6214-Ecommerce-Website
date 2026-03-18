@@ -1,94 +1,114 @@
-import { getCart, CartItem } from "../../services/api";
 import { useEffect, useState } from "react";
+import { getCart, CartItem, checkout } from "../../services/api";
+import { useNavigate } from "react-router-dom";
 
 export default function BuyerCheckout() {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
-    setItems(getCart());
+    async function loadCart() {
+      try {
+        const data = await getCart();
+        setItems(data);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load cart.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadCart();
   }, []);
 
   const subtotal = items.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
+    (sum, item) => sum + Number(item.unitPrice) * item.quantity,
     0
   );
 
   const tax = subtotal * 0.07;
-  const fees = items.length > 0 ? 4.99 : 0;
-  const total = subtotal + tax + fees;
+  const total = subtotal + tax;
+
+  async function handleCheckout() {
+    try {
+      setProcessing(true);
+      setError("");
+
+      const result = await checkout();
+
+      alert(`Order placed! Total: $${Number(result.order.total).toFixed(2)}`);
+
+      // redirect to cart (which will now be empty)
+      navigate("/buyer/cart");
+    } catch (err: any) {
+      console.error(err);
+
+      if (err?.response?.status === 400) {
+        setError(err.response.data.error);
+      } else {
+        setError("Checkout failed.");
+      }
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  if (loading) return <div className="card cardPad">Loading checkout...</div>;
 
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="card cardPad">
         <div className="h2">Checkout</div>
-        <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-          Review your items and order totals.
-        </div>
       </div>
 
-      {items.length === 0 ? (
-        <div className="card cardPad">Your cart is empty.</div>
-      ) : (
-        <>
-          <div className="card cardPad">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Qty</th>
-                  <th>Unit Price</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.productId}>
-                    <td>{item.name}</td>
-                    <td>{item.quantity}</td>
-                    <td>${Number(item.unitPrice).toFixed(2)}</td>
-                    <td>${Number(item.unitPrice * item.quantity).toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="card cardPad">
-            <div className="h2" style={{ marginBottom: 12 }}>Order Summary</div>
-
-            <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-              <span>Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
-            </div>
-
-            <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-              <span>Tax</span>
-              <span>${tax.toFixed(2)}</span>
-            </div>
-
-            <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-              <span>Fees</span>
-              <span>${fees.toFixed(2)}</span>
-            </div>
-
-            <div className="divider" />
-
-            <div
-              className="row"
-              style={{ justifyContent: "space-between", fontWeight: 700, fontSize: 18 }}
-            >
-              <span>Final Total</span>
-              <span>${total.toFixed(2)}</span>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <button className="btn btnPrimary" disabled>
-                Place Order
-              </button>
-            </div>
-          </div>
-        </>
+      {error && (
+        <div className="card cardPad" style={{ color: "red" }}>
+          {error}
+        </div>
       )}
+
+      <div className="card cardPad">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.productId}>
+                <td>{item.name || "Product"}</td>
+                <td>{item.quantity}</td>
+                <td>${Number(item.unitPrice).toFixed(2)}</td>
+                <td>${(Number(item.unitPrice) * item.quantity).toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card cardPad">
+        <div>Subtotal: ${subtotal.toFixed(2)}</div>
+        <div>Tax (7%): ${tax.toFixed(2)}</div>
+        <div className="h2">Total: ${total.toFixed(2)}</div>
+
+        <button
+          className="btn btnPrimary"
+          style={{ marginTop: 12 }}
+          onClick={handleCheckout}
+          disabled={processing || items.length === 0}
+        >
+          {processing ? "Processing..." : "Place Order"}
+        </button>
+      </div>
     </div>
   );
 }

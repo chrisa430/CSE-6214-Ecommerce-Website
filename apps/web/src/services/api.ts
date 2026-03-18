@@ -20,8 +20,18 @@ const inventoryApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+const cartApi = axios.create({
+  baseURL: "/api/cart",
+  headers: { "Content-Type": "application/json" },
+});
+
+const orderApi = axios.create({
+  baseURL: "/api/orders",
+  headers: { "Content-Type": "application/json" },
+});
+
 // Attach JWT to every authenticated request automatically
-[authApi, accountApi, adminApi, inventoryApi].forEach((instance) => {
+[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi].forEach((instance) => {
   instance.interceptors.request.use((config) => {
     const token = localStorage.getItem("accessToken");
     if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -227,50 +237,62 @@ export async function submitProductDecision(
 
 export interface CartItem {
   productId: string;
-  name: string;
-  unitPrice: number;
   quantity: number;
+  unitPrice: number;
+  name?: string;
   imageUrl?: string;
 }
 
-const CART_KEY = "buyerCart";
-
-export function getCart(): CartItem[] {
-  const raw = localStorage.getItem(CART_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+export async function getCart(): Promise<CartItem[]> {
+  const { data } = await cartApi.get<CartItem[]>("/");
+  return data;
 }
 
-export function saveCart(items: CartItem[]): void {
-  localStorage.setItem(CART_KEY, JSON.stringify(items));
+export async function addToCart(product: Product): Promise<CartItem> {
+  const { data } = await cartApi.post<CartItem>("/items", {
+    productId: product.id,
+    quantity: 1,
+    unitPrice: product.unitPrice,
+  });
+  return data;
 }
 
-export function addToCart(product: Product): void {
-  const cart = getCart();
-  const existing = cart.find((item) => item.productId === product.id);
-
-  if (existing) {
-    existing.quantity += 1;
-  } else {
-    cart.push({
-      productId: product.id,
-      name: product.name,
-      unitPrice: product.unitPrice,
-      quantity: 1,
-      imageUrl: product.imageUrl,
-    });
-  }
-
-  saveCart(cart);
+export async function removeFromCart(productId: string): Promise<void> {
+  await cartApi.delete(`/items/${productId}`);
 }
 
-export function removeFromCart(productId: string): void {
-  const cart = getCart().filter((item) => item.productId !== productId);
-  saveCart(cart);
+export interface OrderResponse {
+  message: string;
+  order: {
+    id: string;
+    buyerId: string;
+    subtotal: number;
+    tax: number;
+    total: number;
+    createdAt: string;
+  };
+  items: CartItem[];
+}
+
+export async function checkout(): Promise<OrderResponse> {
+  const { data } = await orderApi.post<OrderResponse>("/checkout");
+  return data;
+}
+
+export interface Order {
+  id: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  createdAt: string;
+  items: {
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+  }[];
+}
+
+export async function getMyOrders(): Promise<Order[]> {
+  const { data } = await orderApi.get<Order[]>("/mine");
+  return data;
 }
