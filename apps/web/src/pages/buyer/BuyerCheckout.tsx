@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
-import { getCart, CartItem, checkout } from "../../services/api";
-import { useNavigate } from "react-router-dom";
+import { checkout, getCart, CartItem } from "../../services/api";
 
 export default function BuyerCheckout() {
   const [items, setItems] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
+
+  // Form state
+  const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
+
+  const [cardNumber, setCardNumber] = useState("");
+  const [exp, setExp] = useState("");
+  const [cvv, setCvv] = useState("");
 
   useEffect(() => {
     async function loadCart() {
@@ -16,9 +23,7 @@ export default function BuyerCheckout() {
         setItems(data);
       } catch (err) {
         console.error(err);
-        setError("Failed to load cart.");
-      } finally {
-        setLoading(false);
+        setError("Failed to load cart");
       }
     }
 
@@ -35,79 +40,130 @@ export default function BuyerCheckout() {
 
   async function handleCheckout() {
     try {
-      setProcessing(true);
-      setError("");
+      await checkout();
 
-      const result = await checkout();
+      alert("✅ Order placed successfully!");
 
-      alert(`Order placed! Total: $${Number(result.order.total).toFixed(2)}`);
-
-      // redirect to cart (which will now be empty)
-      navigate("/buyer/cart");
-    } catch (err: any) {
+      // optional: redirect later
+      window.location.href = "/buyer/orders";
+    } catch (err) {
       console.error(err);
-
-      if (err?.response?.status === 400) {
-        setError(err.response.data.error);
-      } else {
-        setError("Checkout failed.");
-      }
-    } finally {
-      setProcessing(false);
+      setError("Checkout failed");
     }
   }
 
-  if (loading) return <div className="card cardPad">Loading checkout...</div>;
-
   return (
-    <div className="col" style={{ gap: 16 }}>
+    <div className="col" style={{ gap: 20 }}>
       <div className="card cardPad">
         <div className="h2">Checkout</div>
       </div>
 
-      {error && (
-        <div className="card cardPad" style={{ color: "red" }}>
-          {error}
+      {error && <div className="card cardPad">{error}</div>}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr",
+          gap: 20,
+        }}
+      >
+        {/* LEFT SIDE */}
+        <div className="col" style={{ gap: 16 }}>
+          {/* SHIPPING */}
+          <div className="card cardPad">
+            <div className="h2">Shipping Information</div>
+
+            <input className="input" placeholder="Full Name" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className="input" placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <input className="input" placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
+
+            <div className="row" style={{ gap: 10 }}>
+              <input className="input" placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />
+              <input className="input" placeholder="Zip Code" value={zip} onChange={(e) => setZip(e.target.value)} />
+            </div>
+          </div>
+
+          {/* PAYMENT */}
+          <div className="card cardPad">
+            <div className="h2">Payment Information</div>
+
+            <input
+              className="input"
+              placeholder="Card Number"
+              value={cardNumber}
+              onChange={(e) => setCardNumber(e.target.value)}
+            />
+
+            <div className="row" style={{ gap: 10 }}>
+              <input
+                className="input"
+                placeholder="MM/YY"
+                value={exp}
+                onChange={(e) => setExp(e.target.value)}
+              />
+              <input
+                className="input"
+                placeholder="CVV"
+                value={cvv}
+                onChange={(e) => setCvv(e.target.value)}
+              />
+            </div>
+
+            <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              * This is a simulated payment. No real transaction occurs.
+            </div>
+          </div>
         </div>
-      )}
 
-      <div className="card cardPad">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Qty</th>
-              <th>Price</th>
-              <th>Total</th>
-            </tr>
-          </thead>
+        {/* RIGHT SIDE */}
+        <div className="card cardPad">
+          <div className="h2">Order Summary</div>
 
-          <tbody>
+          <div style={{ marginTop: 10 }}>
             {items.map((item) => (
-              <tr key={item.productId}>
-                <td>{item.name || "Product"}</td>
-                <td>{item.quantity}</td>
-                <td>${Number(item.unitPrice).toFixed(2)}</td>
-                <td>${(Number(item.unitPrice) * item.quantity).toFixed(2)}</td>
-              </tr>
+              <div
+                key={item.productId}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: 8,
+                }}
+              >
+                <div>
+                  {item.name || "Item"} x{item.quantity}
+                </div>
+                <div>
+                  ${(Number(item.unitPrice) * item.quantity).toFixed(2)}
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
 
-      <div className="card cardPad">
-        <div>Subtotal: ${subtotal.toFixed(2)}</div>
-        <div>Tax (7%): ${tax.toFixed(2)}</div>
-        <div className="h2">Total: ${total.toFixed(2)}</div>
+          <div className="divider" />
 
-        <button
-          className="btn btnPrimary"
-          style={{ marginTop: 12 }}
-          onClick={handleCheckout}
-          disabled={processing || items.length === 0}
-        >
-          {processing ? "Processing..." : "Place Order"}
-        </button>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span>Subtotal</span>
+            <span>${subtotal.toFixed(2)}</span>
+          </div>
+
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span>Tax</span>
+            <span>${tax.toFixed(2)}</span>
+          </div>
+
+          <div className="row" style={{ justifyContent: "space-between", fontWeight: 700 }}>
+            <span>Total</span>
+            <span>${total.toFixed(2)}</span>
+          </div>
+
+          <button
+            className="btn btnPrimary"
+            style={{ marginTop: 20, width: "100%" }}
+            onClick={handleCheckout}
+          >
+            Place Order
+          </button>
+        </div>
       </div>
     </div>
   );
