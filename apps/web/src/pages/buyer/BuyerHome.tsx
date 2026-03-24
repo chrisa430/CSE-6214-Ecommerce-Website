@@ -77,6 +77,8 @@ export default function BuyerHome() {
                 height: 180,
                 objectFit: "contain",
                 borderRadius: 8,
+                background: "#181717",
+                padding: 6,
               }}
             />
 
@@ -93,18 +95,31 @@ export default function BuyerHome() {
             </div>
 
             <div className="muted" style={{ fontSize: 12 }}>
-              In stock: {product.quantity}
+              {product.quantity === 0
+                ? "Out of stock"
+                : `In stock: ${product.quantity}`}
             </div>
 
-            <button
-              className="btn btnPrimary"
-              onClick={() => {
-                addToCart(product);
-                alert(`${product.name} added to cart`);
-              }}
-            >
-              Add to Cart
-            </button>
+            {product.quantity === 0 ? (
+              <button className="btn" disabled>
+                Out of Stock
+              </button>
+            ) : (
+              <button
+                className="btn btnPrimary"
+                onClick={async () => {
+                  try {
+                    await addToCart(product);
+                    alert(`${product.name} added to cart`);
+                  } catch (err) {
+                    console.error(err);
+                    alert("Failed to add item to cart");
+                  }
+                }}
+              >
+                Add to Cart
+              </button>
+            )}
           </div>
         ))}
       </div>

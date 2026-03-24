@@ -2,22 +2,31 @@
   "name": "sportvault",
   "version": "4.0.0",
   "private": true,
-  "description": "SportVault \u2013 Sprint 4: Authentication, Registration & Microservices",
+  "description": "SportVault – Sprint 4: Authentication, Registration & Microservices",
   "workspaces": [
     "apps/web",
     "services/authn-authz-service",
     "services/account-service",
-    "services/admin-service"
+    "services/admin-service",
+    "services/inventory-service",
+    "services/order-service",
+    "services/shopping-cart-service"
   ],
   "scripts": {
-    "dev": "npx --yes concurrently --kill-others-on-fail --names \"WEB,AUTHN,ACCOUNT,ADMIN\" --prefix-colors \"cyan,yellow,green,magenta\" \"npm run dev:web\" \"npm run dev:authn\" \"npm run dev:account\" \"npm run dev:admin\"",
+    "dev": "npx --yes concurrently --kill-others-on-fail --names \"WEB,AUTHN,ACCOUNT,ADMIN,INVENTORY,CART,ORDER\" --prefix-colors \"cyan,yellow,green,magenta,blue,red,white\" \"npm run dev:web\" \"npm run dev:authn\" \"npm run dev:account\" \"npm run dev:admin\" \"npm run dev:inventory\" \"npm run dev:cart\" \"npm run dev:order\"",
+
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "install:all": "npm install && cd apps/web && npm install && cd ../../services/authn-authz-service && npm install && cd ../account-service && npm install && cd ../admin-service && npm install",
+
+    "install:all": "npm install && cd apps/web && npm install && cd ../../services/authn-authz-service && npm install && cd ../account-service && npm install && cd ../admin-service && npm install && cd ../inventory-service && npm install && cd ../order-service && npm install && cd ../shopping-cart-service && npm install",
+
     "dev:web": "cd apps/web && npm run dev",
     "dev:authn": "cd services/authn-authz-service && npm run dev",
     "dev:account": "cd services/account-service && npm run dev",
-    "dev:admin": "cd services/admin-service && npm run dev"
+    "dev:admin": "cd services/admin-service && npm run dev",
+    "dev:inventory": "cd services/inventory-service && npm run dev",
+    "dev:cart": "cd services/shopping-cart-service && npm run dev",
+    "dev:order": "cd services/order-service && npm run dev"
   },
   "dependencies": {
     "node-fetch": "^3.3.2"

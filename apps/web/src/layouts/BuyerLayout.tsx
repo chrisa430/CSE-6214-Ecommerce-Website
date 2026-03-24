@@ -31,6 +31,7 @@ export default function BuyerLayout() {
               <NavItem to="/buyer">Browse Products</NavItem>
               <NavItem to="/buyer/cart">Shopping Cart</NavItem>
               <NavItem to="/buyer/checkout">Checkout</NavItem>
+              <NavItem to="/buyer/orders">Order History</NavItem>
             </nav>
 
             <div style={{ flex: 1 }} />
