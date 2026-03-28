@@ -14,8 +14,9 @@ const kafka = new Kafka({
 });
 
 export const TOPICS = {
-  ACCOUNT_EVENTS: "account.events",   // consumed from AccountService
-  ADMIN_EVENTS:   "admin.events",     // published by this service
+  ACCOUNT_EVENTS:  "account.events",   // consumed from AccountService
+  ADMIN_EVENTS:    "admin.events",     // published by this service (account decisions)
+  PRODUCT_EVENTS:  "product.events",   // published by this service (product status changes)
 } as const;
 
 let producer: Producer | null = null;

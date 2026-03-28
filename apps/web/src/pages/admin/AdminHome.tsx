@@ -86,7 +86,7 @@ export default function AdminHome() {
           <ActionCard
             title="Moderate Product Listings"
             desc="Approve, block, or remove products from the catalog."
-            anchor="products"
+            to="/admin/products"
           />
           <ActionCard
             title="View Audit Logs"
@@ -135,7 +135,8 @@ export default function AdminHome() {
   );
 }
 
-function ActionCard({ title, desc, anchor }: { title: string; desc: string; anchor: string }) {
+function ActionCard({ title, desc, anchor, to }: { title: string; desc: string; anchor?: string; to?: string }) {
+  const href = to ?? `/admin/subpage${anchor ? `#${anchor}` : ""}`;
   return (
     <div className="card cardPad" style={{ flex: 1, minWidth: 220 }}>
       <div className="h2">{title}</div>
@@ -143,7 +144,7 @@ function ActionCard({ title, desc, anchor }: { title: string; desc: string; anch
         {desc}
       </div>
       <div style={{ marginTop: 14 }}>
-        <Link className="btn" to={`/admin/subpage#${anchor}`}>
+        <Link className="btn" to={href}>
           Open
         </Link>
       </div>

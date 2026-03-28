@@ -1,5 +1,5 @@
 /**
- * @fileoverview Application entry point — InventoryService
+ * @fileoverview Application entry point — SellerService
  * @module index.ts
  * @author Darrell Hobson
  */
@@ -11,12 +11,11 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { testConnection } from "./db/pool";
 import { getProducer }   from "./kafka/client";
-import { startConsumer } from "./kafka/consumer";
-import routes             from "./routes/inventory";
+import routes             from "./routes/sellers";
 import { logger }        from "./logger";
 
 const app  = express();
-const PORT = parseInt(process.env.PORT || "3007");
+const PORT = parseInt(process.env.PORT || "3006");
 
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173", credentials: true }));
@@ -29,10 +28,10 @@ const apiLimiter = rateLimit({
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ service: "InventoryService", status: "ok", ts: new Date().toISOString() });
+  res.json({ service: "SellerService", status: "ok", ts: new Date().toISOString() });
 });
 
-app.use("/inventory", apiLimiter, routes);
+app.use("/sellers", apiLimiter, routes);
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -53,7 +52,7 @@ function tcpReachable(host: string, port: number): Promise<boolean> {
 
 async function waitForDb(maxAttempts = 20, delayMs = 3000): Promise<void> {
   const host = process.env.DB_HOST || "localhost";
-  const port = parseInt(process.env.DB_PORT || "5437");
+  const port = parseInt(process.env.DB_PORT || "5438");
   for (let i = 1; i <= maxAttempts; i++) {
     if (await tcpReachable(host, port)) {
       try { await testConnection(); return; } catch (err) {
@@ -87,19 +86,14 @@ async function waitForKafka(maxAttempts = 8, delayMs = 4000): Promise<void> {
 
 async function bootstrap(): Promise<void> {
   logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  logger.info(`  InventoryService — startup`);
-  logger.info(`  DB    → ${process.env.DB_HOST || "localhost"}:${process.env.DB_PORT || "5437"}/${process.env.DB_NAME || "inventory"}`);
+  logger.info(`  SellerService — startup`);
+  logger.info(`  DB    → ${process.env.DB_HOST || "localhost"}:${process.env.DB_PORT || "5438"}/${process.env.DB_NAME || "seller"}`);
   logger.info(`  Kafka → ${process.env.KAFKA_BROKERS || "localhost:9092"}`);
   logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   try {
     await waitForDb();
     await waitForKafka();
-    app.listen(PORT, () => {
-      logger.info(`\n🚀  InventoryService ready → http://localhost:${PORT}\n`);
-      startConsumer().catch((err) =>
-        logger.error("Kafka consumer failed to start", err)
-      );
-    });
+    app.listen(PORT, () => logger.info(`\n🚀  SellerService ready → http://localhost:${PORT}\n`));
   } catch (err) {
     logger.error(`\n❌  Fatal: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);

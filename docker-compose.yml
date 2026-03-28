@@ -1,7 +1,7 @@
 version: "3.9"
 
 services:
-  # ── Zookeeper (Kafka dependency) ──────────────────────────────────────────
+  # ── Zookeeper ──────────────────────────────────────────────────────────────
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
     container_name: zookeeper
@@ -32,7 +32,37 @@ services:
     networks:
       - sportvault-net
 
-  # ── PostgreSQL – authn_authz database ─────────────────────────────────────
+  # ── Kafka Topic Provisioner ────────────────────────────────────────────────
+  # Runs once at startup to pre-create all topics with defined partition counts.
+  # Prevents auto-create from producing single-partition topics with no replication.
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka-init
+    depends_on:
+      - kafka
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: |
+      "
+      echo 'Waiting for Kafka to be ready...'
+      cub kafka-ready -b kafka:29092 1 30
+      echo 'Creating SportVault topics...'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic auth.events            --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic account.events         --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic account.lookup         --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic account.lookup.result  --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic admin.events           --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic product.events         --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic inventory.events       --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic shopping_cart.events   --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic order.events           --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic seller.events          --partitions 3 --replication-factor 1
+      echo 'All topics created successfully.'
+      kafka-topics --bootstrap-server kafka:29092 --list
+      "
+    networks:
+      - sportvault-net
+
+  # ── PostgreSQL databases ───────────────────────────────────────────────────
   postgres-authn:
     image: postgres:16-alpine
     container_name: postgres-authn
@@ -48,7 +78,6 @@ services:
     networks:
       - sportvault-net
 
-  # ── PostgreSQL – account database ─────────────────────────────────────────
   postgres-account:
     image: postgres:16-alpine
     container_name: postgres-account
@@ -64,7 +93,6 @@ services:
     networks:
       - sportvault-net
 
-  # ── PostgreSQL – admin database ───────────────────────────────────────────
   postgres-admin:
     image: postgres:16-alpine
     container_name: postgres-admin
@@ -80,7 +108,6 @@ services:
     networks:
       - sportvault-net
 
-  # ── PostgreSQL – shopping_cart database ───────────────────────────────────
   postgres-shopping-cart:
     image: postgres:16-alpine
     container_name: postgres-shopping-cart
@@ -96,7 +123,6 @@ services:
     networks:
       - sportvault-net
 
-  # ── PostgreSQL – order database ───────────────────────────────────────────
   postgres-order:
     image: postgres:16-alpine
     container_name: postgres-order
@@ -112,7 +138,6 @@ services:
     networks:
       - sportvault-net
 
-  # ── PostgreSQL – inventory database ───────────────────────────────────────
   postgres-inventory:
     image: postgres:16-alpine
     container_name: postgres-inventory
@@ -128,7 +153,6 @@ services:
     networks:
       - sportvault-net
 
-  # ── PostgreSQL – seller database ──────────────────────────────────────────
   postgres-seller:
     image: postgres:16-alpine
     container_name: postgres-seller
@@ -144,39 +168,204 @@ services:
     networks:
       - sportvault-net
 
-  # ── AdminService (Node.js microservice) ───────────────────────────────────
-  # Uncomment to run AdminService inside Docker (otherwise run with `npm run dev`)
-  # admin-service:
-  #   build:
-  #     context: ./services/admin-service
-  #     dockerfile: Dockerfile
-  #   container_name: admin-service
-  #   environment:
-  #     NODE_ENV: production
-  #     PORT: 3003
-  #     DB_HOST: postgres-admin
-  #     DB_PORT: 5432
-  #     DB_NAME: admin
-  #     DB_USER: admin_user
-  #     DB_PASS: admin_pass
-  #     ACCOUNT_DB_HOST: postgres-account
-  #     ACCOUNT_DB_PORT: 5432
-  #     ACCOUNT_DB_NAME: account
-  #     ACCOUNT_DB_USER: account_user
-  #     ACCOUNT_DB_PASS: account_pass
-  #     KAFKA_BROKERS: kafka:29092
-  #     INTERNAL_SECRET: internal-secret
-  #     APP_BASE_URL: http://localhost:5173
-  #     OUTBOX_POLL_MS: 30000
-  #   ports:
-  #     - "3003:3003"
-  #   depends_on:
-  #     - postgres-admin
-  #     - postgres-account
-  #     - kafka
-  #   networks:
-  #     - sportvault-net
+  # ── Microservices ──────────────────────────────────────────────────────────
+  authn-authz-service:
+    build:
+      context: ./services/authn-authz-service
+      dockerfile: Dockerfile
+    container_name: authn-authz-service
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: postgres-authn
+      DB_PORT: 5432
+      DB_NAME: authn_authz
+      DB_USER: authn_user
+      DB_PASS: authn_pass
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: authn-authz-service
+      INTERNAL_SECRET: internal-secret
+      ACCOUNT_SERVICE_URL: http://account-service:3002
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres-authn
+      - kafka
+    networks:
+      - sportvault-net
+    restart: unless-stopped
 
+  account-service:
+    build:
+      context: ./services/account-service
+      dockerfile: Dockerfile
+    container_name: account-service
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DB_HOST: postgres-account
+      DB_PORT: 5432
+      DB_NAME: account
+      DB_USER: account_user
+      DB_PASS: account_pass
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: account-service
+      INTERNAL_SECRET: internal-secret
+      APP_BASE_URL: http://localhost:5173
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3002:3002"
+    depends_on:
+      - postgres-account
+      - kafka
+    networks:
+      - sportvault-net
+    restart: unless-stopped
+
+  admin-service:
+    build:
+      context: ./services/admin-service
+      dockerfile: Dockerfile
+    container_name: admin-service
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      DB_HOST: postgres-admin
+      DB_PORT: 5432
+      DB_NAME: admin
+      DB_USER: admin_user
+      DB_PASS: admin_pass
+      ACCOUNT_DB_HOST: postgres-account
+      ACCOUNT_DB_PORT: 5432
+      ACCOUNT_DB_NAME: account
+      ACCOUNT_DB_USER: account_user
+      ACCOUNT_DB_PASS: account_pass
+      INVENTORY_DB_HOST: postgres-inventory
+      INVENTORY_DB_PORT: 5432
+      INVENTORY_DB_NAME: inventory
+      INVENTORY_DB_USER: inventory_user
+      INVENTORY_DB_PASS: inventory_pass
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: admin-service
+      INTERNAL_SECRET: internal-secret
+      APP_BASE_URL: http://localhost:5173
+      CORS_ORIGIN: http://localhost:5173
+      OUTBOX_POLL_MS: 30000
+    ports:
+      - "3003:3003"
+    depends_on:
+      - postgres-admin
+      - postgres-account
+      - postgres-inventory
+      - kafka
+    networks:
+      - sportvault-net
+    restart: unless-stopped
+
+  shopping-cart-service:
+    build:
+      context: ./services/shopping-cart-service
+      dockerfile: Dockerfile
+    container_name: shopping-cart-service
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      DB_HOST: postgres-shopping-cart
+      DB_PORT: 5432
+      DB_NAME: shopping_cart
+      DB_USER: shopping_cart_user
+      DB_PASS: shopping_cart_pass
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: shopping-cart-service
+      INTERNAL_SECRET: internal-secret
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3004:3004"
+    depends_on:
+      - postgres-shopping-cart
+      - kafka
+    networks:
+      - sportvault-net
+    restart: unless-stopped
+
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    container_name: order-service
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      DB_HOST: postgres-order
+      DB_PORT: 5432
+      DB_NAME: order
+      DB_USER: order_user
+      DB_PASS: order_pass
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: order-service
+      INTERNAL_SECRET: internal-secret
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3005:3005"
+    depends_on:
+      - postgres-order
+      - kafka
+    networks:
+      - sportvault-net
+    restart: unless-stopped
+
+  seller-service:
+    build:
+      context: ./services/seller-service
+      dockerfile: Dockerfile
+    container_name: seller-service
+    environment:
+      NODE_ENV: production
+      PORT: 3006
+      DB_HOST: postgres-seller
+      DB_PORT: 5432
+      DB_NAME: seller
+      DB_USER: seller_user
+      DB_PASS: seller_pass
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: seller-service
+      INTERNAL_SECRET: internal-secret
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3006:3006"
+    depends_on:
+      - postgres-seller
+      - kafka
+    networks:
+      - sportvault-net
+    restart: unless-stopped
+
+  inventory-service:
+    build:
+      context: ./services/inventory-service
+      dockerfile: Dockerfile
+    container_name: inventory-service
+    environment:
+      NODE_ENV: production
+      PORT: 3007
+      DB_HOST: postgres-inventory
+      DB_PORT: 5432
+      DB_NAME: inventory
+      DB_USER: inventory_user
+      DB_PASS: inventory_pass
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: inventory-service
+      INTERNAL_SECRET: internal-secret
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3007:3007"
+    depends_on:
+      - postgres-inventory
+      - kafka
+    networks:
+      - sportvault-net
+    restart: unless-stopped
 
 volumes:
   postgres-authn-data:

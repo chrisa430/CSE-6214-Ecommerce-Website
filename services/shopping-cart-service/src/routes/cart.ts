@@ -1,9 +1,25 @@
+/**
+ * @fileoverview ShoppingCartService route handlers — placeholder + seed
+ * @module routes/cart.ts
+ * @author Darrell Hobson
+ * @Date 2026.03.07
+ */
+
 import { Router, Request, Response } from "express";
 import { getPool } from "../db/pool";
 import { requireAuth } from "../middleware/authGuard";
 import { requireRole } from "../middleware/requireRole";
+import { publishEvent, TOPICS } from "../kafka/client";
+import { logger }               from "../logger";
 
 const router = Router();
+
+function requireInternalSecret(req: Request, res: Response, next: () => void): void {
+  if (req.headers["x-internal-secret"] !== (process.env.INTERNAL_SECRET || "internal-secret")) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  next();
+}
 
 router.get("/test", (_req: Request, res: Response) => {
   res.json({ message: "Shopping cart routes working" });
