@@ -14,12 +14,12 @@ CREATE TABLE IF NOT EXISTS order_status (
     long_desc  TEXT
     );
 INSERT INTO order_status (name, short_desc, long_desc) VALUES
-                                                           ('pending',   'Pending',    'Order placed, awaiting payment confirmation'),
-                                                           ('confirmed', 'Confirmed',  'Payment confirmed, order is being processed'),
-                                                           ('shipped',   'Shipped',    'Order has been shipped'),
-                                                           ('delivered', 'Delivered',  'Order has been delivered'),
-                                                           ('cancelled', 'Cancelled',  'Order was cancelled'),
-                                                           ('refunded',  'Refunded',   'Payment was refunded')
+    ('pending',   'Pending',    'Order placed, awaiting payment confirmation'),
+    ('confirmed', 'Confirmed',  'Payment confirmed, order is being processed'),
+    ('shipped',   'Shipped',    'Order has been shipped'),
+    ('delivered', 'Delivered',  'Order has been delivered'),
+    ('cancelled', 'Cancelled',  'Order was cancelled'),
+    ('refunded',  'Refunded',   'Payment was refunded')
 ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS currency_type (

@@ -1,19 +1,13 @@
-/**
- * @fileoverview ShoppingCartService route handlers — placeholder + seed
- * @module routes/cart.ts
- * @author Darrell Hobson
- * @Date 2026.03.07
- */
-
 import { Router, Request, Response } from "express";
 import { getPool } from "../db/pool";
 import { requireAuth } from "../middleware/authGuard";
 import { requireRole } from "../middleware/requireRole";
 import { publishEvent, TOPICS } from "../kafka/client";
-import { logger }               from "../logger";
+import { logger } from "../logger";
 
 const router = Router();
 
+// ── Internal-secret guard (for seed endpoint) ───────────────────────────────
 function requireInternalSecret(req: Request, res: Response, next: () => void): void {
   if (req.headers["x-internal-secret"] !== (process.env.INTERNAL_SECRET || "internal-secret")) {
     res.status(403).json({ error: "Forbidden" }); return;
@@ -47,7 +41,7 @@ async function getOrCreateCartId(buyerId: string): Promise<string> {
   return created.rows[0].id as string;
 }
 
-// GET /cart
+// ── GET /cart ─────────────────────────────────────────────────────────────
 router.get("/", requireAuth, requireRole("buyer"), async (req: Request, res: Response) => {
   const pool = getPool();
   const buyerId = (req as any).user.sub;
@@ -73,7 +67,7 @@ router.get("/", requireAuth, requireRole("buyer"), async (req: Request, res: Res
   }
 });
 
-// POST /cart/items
+// ── POST /cart/items ──────────────────────────────────────────────────────
 router.post("/items", requireAuth, requireRole("buyer"), async (req: Request, res: Response) => {
   const pool = getPool();
   const buyerId = (req as any).user.sub;
@@ -105,6 +99,8 @@ router.post("/items", requireAuth, requireRole("buyer"), async (req: Request, re
       [cartId, productId]
     );
 
+    let result;
+
     if (existing.rowCount && existing.rows[0]?.id) {
       const updated = await pool.query(
         `UPDATE shopping_cart_items
@@ -114,25 +110,37 @@ router.post("/items", requireAuth, requireRole("buyer"), async (req: Request, re
         [qty, existing.rows[0].id]
       );
 
-      res.json(updated.rows[0]);
-      return;
+      result = updated.rows[0];
+    } else {
+      const inserted = await pool.query(
+        `INSERT INTO shopping_cart_items (shopping_cart_id, product_id, quantity, unit_price)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, product_id AS "productId", quantity, unit_price AS "unitPrice"`,
+        [cartId, productId, qty, unitPrice]
+      );
+
+      result = inserted.rows[0];
     }
 
-    const inserted = await pool.query(
-      `INSERT INTO shopping_cart_items (shopping_cart_id, product_id, quantity, unit_price)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, product_id AS "productId", quantity, unit_price AS "unitPrice"`,
-      [cartId, productId, qty, unitPrice]
-    );
+    // Publish Kafka event
+    await publishEvent(TOPICS.SHOPPING_CART_EVENTS, cartId, {
+      eventType:  "CART_ITEM_ADDED",
+      cartId,
+      buyerId,
+      productId,
+      quantity: qty,
+      unitPrice,
+      occurredAt: new Date().toISOString(),
+    }).catch((err) => logger.warn("Kafka publish failed (non-fatal)", err));
 
-    res.status(201).json(inserted.rows[0]);
+    res.status(201).json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// DELETE /cart/items/:productId
+// ── DELETE /cart/items/:productId ─────────────────────────────────────────
 router.delete("/items/:productId", requireAuth, requireRole("buyer"), async (req: Request, res: Response) => {
   const pool = getPool();
   const buyerId = (req as any).user.sub;
@@ -153,11 +161,39 @@ router.delete("/items/:productId", requireAuth, requireRole("buyer"), async (req
       return;
     }
 
+    // Publish Kafka event
+    await publishEvent(TOPICS.SHOPPING_CART_EVENTS, cartId, {
+      eventType:  "CART_ITEM_REMOVED",
+      cartId,
+      buyerId,
+      productId,
+      occurredAt: new Date().toISOString(),
+    }).catch((err) => logger.warn("Kafka publish failed (non-fatal)", err));
+
     res.json({ message: "Item removed from cart" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+// ── POST /cart/internal/seed ──────────────────────────────────────────────
+// Verifies shopping_cart table is reachable and returns row count.
+// NOTE: Sample inserts use buyer_id UUID (upstream schema). Pass valid account
+// UUIDs from the accounts seed step if actual cart rows are needed.
+router.post("/internal/seed", requireInternalSecret as any, async (_req: Request, res: Response): Promise<void> => {
+  const pool = getPool();
+  try {
+    const total = (await pool.query("SELECT COUNT(*) FROM shopping_cart")).rows[0].count;
+    const items = (await pool.query("SELECT COUNT(*) FROM shopping_cart_items")).rows[0].count;
+    logger.info(`[Seed] shopping_cart: ${total} rows, shopping_cart_items: ${items} rows`);
+    res.json({
+      service: "ShoppingCartService",
+      total_carts: parseInt(total),
+      total_items: parseInt(items),
+      message: "ShoppingCart DB verified",
+    });
+  } catch (err) { logger.error("Seed error", err); res.status(500).json({ error: "Seed failed", detail: String(err) }); }
 });
 
 export default router;
