@@ -6,32 +6,41 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Proxy auth calls to AuthnAuthzService
+      // Proxy auth calls to AuthnAuthzService (:3001)
       "/api/auth": {
         target: "http://localhost:3001",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/auth/, "/auth"),
       },
-      // Proxy account calls to AccountService
+      // Proxy account calls to AccountService (:3002)
       "/api/accounts": {
         target: "http://localhost:3002",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/accounts/, "/accounts"),
       },
-      "/api/cart": {
-        target: "http://localhost:3005",
+      // Proxy admin calls to AdminService (:3003)
+      "/api/admin": {
+        target: "http://localhost:3003",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/cart/, "/cart"),
+        rewrite: (path) => path.replace(/^\/api\/admin/, "/admin"),
       },
-      "/api/orders": {
-        target: "http://localhost:3006",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/orders/, "/orders"),
-      },
+      // Proxy inventory calls to InventoryService (:3007)
       "/api/inventory": {
         target: "http://localhost:3007",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/inventory/, "/inventory"),
+      },
+      // Proxy cart calls to ShoppingCartService (:3004)
+      "/api/cart": {
+        target: "http://localhost:3004",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/cart/, "/cart"),
+      },
+      // Proxy order calls to OrderService (:3005)
+      "/api/orders": {
+        target: "http://localhost:3005",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/orders/, "/orders"),
       },
     },
   },
