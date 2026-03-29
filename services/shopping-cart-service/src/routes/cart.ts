@@ -188,24 +188,17 @@ router.post("/internal/seed", requireInternalSecret as any, async (req: Request,
 
     for (const buyerId of buyerIds.slice(0, 5)) {
       const r = await pool.query(
-        `INSERT INTO shopping_cart (buyer_id) VALUES ($1)
-         ON CONFLICT DO NOTHING RETURNING id`,
-        [buyerId]
+          `INSERT INTO shopping_cart (buyer_id) VALUES ($1)
+            ON CONFLICT DO NOTHING RETURNING id`,
+          [buyerId]
       );
       if (r.rowCount) carts_inserted++;
     }
 
     const total = (await pool.query("SELECT COUNT(*) FROM shopping_cart")).rows[0].count;
     const items = (await pool.query("SELECT COUNT(*) FROM shopping_cart_items")).rows[0].count;
-    logger.info(`[Seed] shopping_cart: ${total} rows, shopping_cart_items: ${items} rows`);
-    res.json({
-      service: "ShoppingCartService",
-      carts_inserted,
-      total_carts: parseInt(total),
-      total_items: parseInt(items),
-      message: "ShoppingCart DB verified",
-    });
-  } catch (err) { logger.error("Seed error", err); res.status(500).json({ error: "Seed failed", detail: String(err) }); }
+    res.json({ service: "ShoppingCartService", carts_inserted, total_carts: parseInt(total), total_items: parseInt(items), message: "ShoppingCart DB verified" });
+  } catch (err) { res.status(500).json({ error: "Seed failed", detail: String(err) }); }
 });
 
 export default router;
