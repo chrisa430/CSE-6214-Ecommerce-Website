@@ -8,11 +8,11 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ── Lookup / reference tables ──────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS order_status (
-                                            id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     name       VARCHAR(64)  NOT NULL UNIQUE,
     short_desc VARCHAR(128),
     long_desc  TEXT
-    );
+);
 INSERT INTO order_status (name, short_desc, long_desc) VALUES
     ('pending',   'Pending',    'Order placed, awaiting payment confirmation'),
     ('confirmed', 'Confirmed',  'Payment confirmed, order is being processed'),

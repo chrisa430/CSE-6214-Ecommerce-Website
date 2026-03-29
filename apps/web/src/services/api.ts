@@ -124,7 +124,7 @@ export interface Product {
   shortDesc?: string;
   longDesc?: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   status: string;
   imageUrl?: string;
   createdAt?: string;
@@ -138,7 +138,7 @@ export interface CreateProductPayload {
   category: string;
   subCategory?: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
 }
 
 export interface Category {
@@ -157,7 +157,7 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
 }
 
 export async function getCategories(): Promise<Category[]> {
-  const { data } = await inventoryApi.get<Category[]>("/products/categories");
+  const { data } = await inventoryApi.get<Category[]>("/categories");
   return data;
 }
 
@@ -202,7 +202,7 @@ export interface PendingProduct {
   name: string;
   sellerId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   status: string;
   imageUrl?: string;
   createdAt: string;
@@ -245,7 +245,7 @@ export async function submitProductDecision(
 export interface CartItem {
   productId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   name?: string;
   imageUrl?: string;
 }
@@ -295,7 +295,7 @@ export interface Order {
   items: {
     productId: string;
     quantity: number;
-    unitPrice: number;
+    unitPrice?: number;
   }[];
 }
 

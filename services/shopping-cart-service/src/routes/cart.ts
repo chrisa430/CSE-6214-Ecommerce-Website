@@ -178,17 +178,29 @@ router.delete("/items/:productId", requireAuth, requireRole("buyer"), async (req
 });
 
 // ── POST /cart/internal/seed ──────────────────────────────────────────────
-// Verifies shopping_cart table is reachable and returns row count.
-// NOTE: Sample inserts use buyer_id UUID (upstream schema). Pass valid account
-// UUIDs from the accounts seed step if actual cart rows are needed.
-router.post("/internal/seed", requireInternalSecret as any, async (_req: Request, res: Response): Promise<void> => {
+// Verifies shopping_cart table and inserts sample carts for provided buyer IDs.
+// Body: { buyerIds?: string[] } — buyer UUIDs from the account seed step
+router.post("/internal/seed", requireInternalSecret as any, async (req: Request, res: Response): Promise<void> => {
   const pool = getPool();
   try {
+    const buyerIds: string[] = (req.body as any).buyerIds ?? [];
+    let carts_inserted = 0;
+
+    for (const buyerId of buyerIds.slice(0, 5)) {
+      const r = await pool.query(
+        `INSERT INTO shopping_cart (buyer_id) VALUES ($1)
+         ON CONFLICT DO NOTHING RETURNING id`,
+        [buyerId]
+      );
+      if (r.rowCount) carts_inserted++;
+    }
+
     const total = (await pool.query("SELECT COUNT(*) FROM shopping_cart")).rows[0].count;
     const items = (await pool.query("SELECT COUNT(*) FROM shopping_cart_items")).rows[0].count;
     logger.info(`[Seed] shopping_cart: ${total} rows, shopping_cart_items: ${items} rows`);
     res.json({
       service: "ShoppingCartService",
+      carts_inserted,
       total_carts: parseInt(total),
       total_items: parseInt(items),
       message: "ShoppingCart DB verified",

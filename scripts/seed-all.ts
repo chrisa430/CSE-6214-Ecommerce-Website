@@ -110,13 +110,15 @@ async function main(): Promise<void> {
   // 4. ShoppingCart
   await seedPost(
     "Step 5 — ShoppingCartService: seed sample carts",
-    `${CART_URL}/cart/internal/seed`
+    `${CART_URL}/cart/internal/seed`,
+    { buyerIds }
   );
 
   // 5. Order service
   await seedPost(
     "Step 6 — OrderService: seed sample orders",
-    `${ORDER_URL}/orders/internal/seed`
+    `${ORDER_URL}/orders/internal/seed`,
+    { buyerIds }
   );
 
   // 6. Seller service

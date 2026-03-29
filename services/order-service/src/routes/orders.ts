@@ -37,14 +37,14 @@ router.get("/currencies", async (_req: Request, res: Response): Promise<void> =>
   } catch (err) { logger.error("Get currencies error", err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// GET /orders/:id — placeholder
+// GET /orders/:id
 router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await getPool().query(
-        `SELECT o.*, cs.name AS status_name, ct.name AS currency_name
+      `SELECT o.id, o.buyer_id AS "buyerId", o.subtotal, o.tax, o.total,
+              o.created_at AS "createdAt", ct.name AS currency_name
        FROM "order" o
-       JOIN order_status os   ON os.id = o.status_id
-       JOIN currency_type ct  ON ct.id = o.currency_id
+       JOIN currency_type ct ON ct.id = o.currency
        WHERE o.id = $1`, [req.params.id]
     );
     if (!result.rowCount) { res.status(404).json({ error: "Order not found" }); return; }
@@ -52,28 +52,41 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   } catch (err) { logger.error("Get order error", err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// POST /orders/internal/seed — seed reference + sample data
-router.post("/internal/seed", requireInternalSecret as any, async (_req: Request, res: Response): Promise<void> => {
+// POST /orders/internal/seed — verify order DB and insert sample orders
+// Body: { buyerIds?: string[] } — buyer UUIDs from the account seed step
+router.post("/internal/seed", requireInternalSecret as any, async (req: Request, res: Response): Promise<void> => {
   const pool = getPool();
   try {
-    // order_status and currency_type are seeded in init.sql — just verify counts
     const statuses   = (await pool.query("SELECT COUNT(*) FROM order_status")).rows[0].count;
     const currencies = (await pool.query("SELECT COUNT(*) FROM currency_type")).rows[0].count;
 
-    // Seed 3 sample orders using placeholder buyer references
-    const usdId  = (await pool.query("SELECT id FROM currency_type WHERE name = 'USD'")).rows[0]?.id;
-    const openId = (await pool.query("SELECT id FROM order_status   WHERE name = 'pending'")).rows[0]?.id;
+    const buyerIds: string[] = (req.body as any).buyerIds ?? [];
+    const usdRow = (await pool.query("SELECT id FROM currency_type WHERE name = 'USD'")).rows[0];
 
     let orders_inserted = 0;
-    if (usdId && openId) {
-      const r = await pool.query(
-          `INSERT INTO "order" (buyer, currency_id, status_id, unit_cost, tax_percent, quantity) VALUES
-           ('james.carter@demo.com',  $1, $2, 149.99, 0.08, 1),
-           ('priya.sharma@demo.com',  $1, $2, 299.00, 0.08, 2),
-           ('marcus.lewis@demo.com',  $1, $2,  89.50, 0.06, 1)`,
-          [usdId, openId]
-      );
-      orders_inserted = r.rowCount ?? 0;
+    if (usdRow && buyerIds.length > 0) {
+      for (let i = 0; i < Math.min(3, buyerIds.length); i++) {
+        const buyerId = buyerIds[i];
+        const cartResult = await pool.query(
+          `INSERT INTO shopping_cart (buyer_id) VALUES ($1)
+           ON CONFLICT DO NOTHING RETURNING id`,
+          [buyerId]
+        );
+        const cartId = cartResult.rows[0]?.id ??
+          (await pool.query(
+            "SELECT id FROM shopping_cart WHERE buyer_id = $1 LIMIT 1", [buyerId]
+          )).rows[0]?.id;
+        if (!cartId) continue;
+
+        await pool.query(
+          `INSERT INTO "order" (buyer_id, currency, shopping_cart_id, subtotal, tax, total)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [buyerId, usdRow.id, cartId,
+           100.00 + i * 50, (100.00 + i * 50) * 0.07,
+           (100.00 + i * 50) * 1.07]
+        );
+        orders_inserted++;
+      }
     }
 
     const orders_total = (await pool.query(`SELECT COUNT(*) FROM "order"`)).rows[0].count;
@@ -84,6 +97,7 @@ router.post("/internal/seed", requireInternalSecret as any, async (_req: Request
       currency_types: parseInt(currencies),
       orders_inserted,
       orders_total: parseInt(orders_total),
+      message: "Order DB verified",
     });
   } catch (err) { logger.error("Seed error", err); res.status(500).json({ error: "Seed failed", detail: String(err) }); }
 });
