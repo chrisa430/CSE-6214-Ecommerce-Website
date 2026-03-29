@@ -67,20 +67,10 @@ router.post("/internal/seed", requireInternalSecret as any, async (req: Request,
         if (usdRow && buyerIds.length > 0) {
             for (let i = 0; i < Math.min(3, buyerIds.length); i++) {
                 const buyerId = buyerIds[i];
-                const cartResult = await pool.query(
-                    `INSERT INTO shopping_cart (buyer_id) VALUES ($1)
-           ON CONFLICT DO NOTHING RETURNING id`,
-                    [buyerId]
-                );
-                const cartId = cartResult.rows[0]?.id ??
-                    (await pool.query(
-                        "SELECT id FROM shopping_cart WHERE buyer_id = $1 LIMIT 1", [buyerId]
-                    )).rows[0]?.id;
-                if (!cartId) continue;
-
+                const cartId = "00000000-0000-0000-0000-000000000001"; // placeholder — cross-DB ref, no FK
                 await pool.query(
                     `INSERT INTO "order" (buyer_id, currency, shopping_cart_id, subtotal, tax, total)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+                                        VALUES ($1, $2, $3, $4, $5, $6)`,
                     [buyerId, usdRow.id, cartId,
                         100.00 + i * 50, (100.00 + i * 50) * 0.07,
                         (100.00 + i * 50) * 1.07]
