@@ -23,8 +23,8 @@ const DB_NAME     = process.env.DB_NAME     || "account";
 const DB_USER     = process.env.DB_USER     || "account_user";
 const DB_PASS     = process.env.DB_PASS     || "account_pass";
 
-const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || "Darrell.Hobson@gmail.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "1982AtCLUiNY";
+const ADMIN_EMAIL    = process.env.ADMIN_EMAIL    || "admin@corp.com";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "He!!0World";
 const ADMIN_FIRST    = process.env.ADMIN_FIRST    || "Admin";
 const ADMIN_LAST     = process.env.ADMIN_LAST     || "User";
 
