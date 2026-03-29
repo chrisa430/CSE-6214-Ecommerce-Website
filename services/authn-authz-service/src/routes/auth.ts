@@ -27,13 +27,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Password rules:
- *  - 12+ chars
+ *  - 8+ chars
  *  - ≥1 uppercase letter
  *  - ≥1 lowercase letter
  *  - ≥1 digit
  *  - ≥1 special char from: * $ ! - @
  */
-const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{12,}$/;
+const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{8,}$/;
 
 /**
  *
@@ -49,7 +49,7 @@ function validateCredentials(
 ): string | null {
   if (!email || !EMAIL_RE.test(email))       return "A valid email address is required.";
   if (!password || !PASSWORD_RE.test(password))
-    return "Password must be ≥12 characters and contain at least one uppercase letter, one lowercase letter, one digit, and one special character (* $ ! - @).";
+    return "Password must be ≥8 characters and contain at least one uppercase letter, one lowercase letter, one digit, and one special character (* $ ! - @).";
   return null;
 }
 
@@ -293,4 +293,3 @@ router.post("/internal/seed", async (req: Request, res: Response): Promise<void>
     res.status(500).json({ error: "Seed check failed", detail: String(err) });
   }
 });
-
