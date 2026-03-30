@@ -22,8 +22,8 @@
  *   Internal seed:
  *     POST /inventory/internal/seed        — populate test data
  *
- * Schema note: unit_price was removed in Sprint 5. Routes ignore any unitPrice
- * sent by clients and return unitPrice: 0 for backward compatibility.
+ * Schema note: unit_price is stored on the product table. Routes accept and
+ * return unitPrice for all seller and buyer-facing endpoints.
  */
 import { Router, Request, Response } from "express";
 import { getPool }              from "../db/pool";
@@ -78,7 +78,7 @@ router.get("/products/active", async (_req: Request, res: Response): Promise<voi
          p.short_desc  AS "shortDesc",
          p.long_desc   AS "longDesc",
          p.quantity,
-         0             AS "unitPrice",
+         p.unit_price  AS "unitPrice",
          pst.name      AS status,
          p.created_at  AS "createdAt",
          p.updated_at  AS "updatedAt",
@@ -117,7 +117,7 @@ router.get(
            p.short_desc  AS "shortDesc",
            p.long_desc   AS "longDesc",
            p.quantity,
-           0             AS "unitPrice",
+           p.unit_price  AS "unitPrice",
            pst.name      AS status,
            p.created_at  AS "createdAt",
            p.updated_at  AS "updatedAt",
@@ -145,7 +145,7 @@ router.get(
 // ── POST /inventory/products ──────────────────────────────────────────────────
 // Body: { name, category (UUID from product_category.id), quantity,
 //         shortDesc?, longDesc?, subCategory? (UUID) }
-// unitPrice is accepted but ignored — column removed in Sprint 5 schema.
+// Body: { name, category (UUID from product_category.id), quantity, unitPrice,
 
 router.post(
   "/products",
@@ -153,9 +153,9 @@ router.post(
   requireRole("seller"),
   async (req: Request, res: Response): Promise<void> => {
     const sellerId = (req as any).user.sub as string;
-    const { name, shortDesc, longDesc, category, subCategory, quantity } = req.body as {
+    const { name, shortDesc, longDesc, category, subCategory, quantity, unitPrice } = req.body as {
       name?: string; shortDesc?: string; longDesc?: string;
-      category?: string; subCategory?: string; quantity?: number;
+      category?: string; subCategory?: string; quantity?: number; unitPrice?: number;
     };
 
     if (!name || !category) {
@@ -180,17 +180,18 @@ router.post(
 
       const result = await getPool().query(
         `INSERT INTO product
-           (seller_id, name, short_desc, long_desc, category_id, subcategory_id, quantity, status_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (seller_id, name, short_desc, long_desc, category_id, subcategory_id, quantity, unit_price, status_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING
            id, seller_id AS "sellerId", name,
            short_desc AS "shortDesc", long_desc AS "longDesc",
-           quantity, created_at AS "createdAt", updated_at AS "updatedAt"`,
+           quantity, unit_price AS "unitPrice",
+           created_at AS "createdAt", updated_at AS "updatedAt"`,
         [sellerId, name, shortDesc ?? null, longDesc ?? null,
-         category, subCategory ?? null, quantity ?? 0, openStatusId]
+         category, subCategory ?? null, quantity ?? 0, unitPrice ?? 0, openStatusId]
       );
 
-      res.status(201).json({ ...result.rows[0], unitPrice: 0, status: "open" });
+      res.status(201).json({ ...result.rows[0], status: "open" });
     } catch (err) {
       logger.error("Create product error", err);
       res.status(500).json({ error: "Internal server error" });
@@ -257,8 +258,8 @@ router.patch(
   async (req: Request, res: Response): Promise<void> => {
     const sellerId  = (req as any).user.sub as string;
     const productId = req.params.id;
-    const { name, shortDesc, longDesc, quantity } = req.body as {
-      name?: string; shortDesc?: string; longDesc?: string; quantity?: number;
+    const { name, shortDesc, longDesc, quantity, unitPrice } = req.body as {
+      name?: string; shortDesc?: string; longDesc?: string; quantity?: number; unitPrice?: number;
     };
 
     const pool = getPool();
@@ -282,20 +283,25 @@ router.patch(
              short_desc = COALESCE($2, short_desc),
              long_desc  = COALESCE($3, long_desc),
              quantity   = COALESCE($4, quantity),
-             status_id  = $5,
+             unit_price = COALESCE($5, unit_price),
+             status_id  = $6,
              updated_at = NOW()
-         WHERE id = $6 AND seller_id = $7
+         WHERE id = $7 AND seller_id = $8
          RETURNING id, name,
            short_desc AS "shortDesc", long_desc AS "longDesc",
-           quantity, created_at AS "createdAt", updated_at AS "updatedAt"`,
+           quantity, unit_price AS "unitPrice",
+           created_at AS "createdAt", updated_at AS "updatedAt"`,
         [name ?? null, shortDesc ?? null, longDesc ?? null, quantity ?? null,
-         nextStatusId, productId, sellerId]
+         unitPrice ?? null, nextStatusId, productId, sellerId]
       );
 
       const statusRow = await pool.query(
         "SELECT name FROM product_status_type WHERE id = $1", [nextStatusId]
       );
-      res.json({ ...result.rows[0], unitPrice: 0, status: statusRow.rows[0]?.name ?? "open" });
+      res.json({
+        ...result.rows[0],
+        status: statusRow.rows[0]?.name ?? "open",
+      });
     } catch (err) {
       logger.error("Update product error", err);
       res.status(500).json({ error: "Internal server error" });
@@ -434,8 +440,8 @@ router.post(
           `INSERT INTO product (seller_id,name,short_desc,long_desc,category_id,subcategory_id,
              team_name,player_name,gender,is_signed,is_authenticated,is_framed,
              has_inscription,inscription_text,has_multi_sigs,is_protected,protection_type_id,
-             condition_id,status_id,quantity)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+             condition_id,status_id,quantity,unit_price)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
            RETURNING id`,
           [getSeller(n), `${item.player} - ${item.type} #${n}`,
            `${item.type} - ${cat.name}`,
@@ -443,7 +449,8 @@ router.post(
            cat.id, sub?.id??null, item.team, item.player, cat.gender??"unspecified",
            item.signed, item.signed, (n%4===0), item.inscribed,
            item.inscribed?item.inscription:null, (n%5===0), (n%3!==2),
-           prot.id, cond.id, statusId, (n%5)+1]
+           prot.id, cond.id, statusId, (n%5)+1,
+           parseFloat(((n * 17.5) + 29.99).toFixed(2))]
         );
         productIds.push(r.rows[0].id); productsInserted++;
       }

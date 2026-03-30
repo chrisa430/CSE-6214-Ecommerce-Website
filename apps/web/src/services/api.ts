@@ -124,7 +124,7 @@ export interface Product {
   shortDesc?: string;
   longDesc?: string;
   quantity: number;
-  unitPrice?: number;
+  unitPrice: number;
   status: string;
   imageUrl?: string;
   createdAt?: string;
@@ -138,7 +138,7 @@ export interface CreateProductPayload {
   category: string;
   subCategory?: string;
   quantity: number;
-  unitPrice?: number;
+  unitPrice: number;
 }
 
 export interface Category {

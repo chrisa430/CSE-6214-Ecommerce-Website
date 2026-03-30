@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS product (
     protection_type_id UUID       REFERENCES protection_type(id),
     condition_id     UUID         REFERENCES condition_type(id),
     status_id        UUID         NOT NULL REFERENCES product_status_type(id),
+    unit_price       NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (unit_price >= 0),
     quantity         INTEGER      NOT NULL DEFAULT 1 CHECK (quantity >= 0),
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()

@@ -306,10 +306,22 @@ services:
       KAFKA_CLIENT_ID: order-service
       INTERNAL_SECRET: internal-secret
       CORS_ORIGIN: http://localhost:5173
+      CART_DB_HOST: postgres-shopping-cart
+      CART_DB_PORT: 5432
+      CART_DB_NAME: shopping_cart
+      CART_DB_USER: shopping_cart_user
+      CART_DB_PASS: shopping_cart_pass
+      INVENTORY_DB_HOST: postgres-inventory
+      INVENTORY_DB_PORT: 5432
+      INVENTORY_DB_NAME: inventory
+      INVENTORY_DB_USER: inventory_user
+      INVENTORY_DB_PASS: inventory_pass
     ports:
       - "3005:3005"
     depends_on:
       - postgres-order
+      - postgres-shopping-cart
+      - postgres-inventory
       - kafka
     networks:
       - sportvault-net

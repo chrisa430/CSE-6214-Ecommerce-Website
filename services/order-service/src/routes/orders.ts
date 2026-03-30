@@ -38,14 +38,58 @@ router.get("/currencies", async (_req: Request, res: Response): Promise<void> =>
 });
 
 // GET /orders/:id
+router.get("/mine", requireAuth, requireRole("buyer"), async (req: Request, res: Response) => {
+    const pool = getPool();
+    const buyerId = (req as any).user.sub;
+
+    try {
+        const ordersResult = await pool.query(
+            `SELECT
+                 o.id,
+                 o.subtotal,
+                 o.tax,
+                 o.total,
+                 o.created_at AS "createdAt"
+             FROM "order" o
+             WHERE o.buyer_id = $1
+             ORDER BY o.created_at DESC`,
+            [buyerId]
+        );
+
+        const orders = ordersResult.rows;
+
+        for (const order of orders) {
+            const itemsResult = await pool.query(
+                `SELECT
+                     coi.product_id AS "productId",
+                     coi.quantity,
+                     coi.unit_price AS "unitPrice",
+                     coi.name,
+                     coi.image_url AS "imageUrl"
+                 FROM completed_order_items coi
+                 WHERE coi.order_id = $1`,
+                [order.id]
+            );
+
+            order.items = itemsResult.rows;
+        }
+
+        res.json(orders);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to load orders" });
+    }
+});
+
+// GET /orders/:id
 router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     try {
         const result = await getPool().query(
             `SELECT o.id, o.buyer_id AS "buyerId", o.subtotal, o.tax, o.total,
-              o.created_at AS "createdAt", ct.name AS currency_name
-       FROM "order" o
-       JOIN currency_type ct ON ct.id = o.currency
-       WHERE o.id = $1`, [req.params.id]
+                    o.created_at AS "createdAt", ct.name AS currency_name
+             FROM "order" o
+                      JOIN currency_type ct ON ct.id = o.currency
+             WHERE o.id = $1`, [req.params.id]
         );
         if (!result.rowCount) { res.status(404).json({ error: "Order not found" }); return; }
         res.json(result.rows[0]);
@@ -63,15 +107,18 @@ router.post("/internal/seed", requireInternalSecret as any, async (req: Request,
         const buyerIds: string[] = (req.body as any).buyerIds ?? [];
         const usdRow = (await pool.query("SELECT id FROM currency_type WHERE name = 'USD'")).rows[0];
 
+        // Use a placeholder UUID for shopping_cart_id — it is a cross-DB reference
+        // with no FK constraint, so any valid UUID is acceptable for seed data.
+        const PLACEHOLDER_CART_ID = "00000000-0000-0000-0000-000000000001";
+
         let orders_inserted = 0;
         if (usdRow && buyerIds.length > 0) {
             for (let i = 0; i < Math.min(3, buyerIds.length); i++) {
                 const buyerId = buyerIds[i];
-                const cartId = "00000000-0000-0000-0000-000000000001"; // placeholder — cross-DB ref, no FK
                 await pool.query(
                     `INSERT INTO "order" (buyer_id, currency, shopping_cart_id, subtotal, tax, total)
-                                        VALUES ($1, $2, $3, $4, $5, $6)`,
-                    [buyerId, usdRow.id, cartId,
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [buyerId, usdRow.id, PLACEHOLDER_CART_ID,
                         100.00 + i * 50, (100.00 + i * 50) * 0.07,
                         (100.00 + i * 50) * 1.07]
                 );
@@ -113,11 +160,11 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
 
         const itemResult = await cartPool.query(
             `SELECT
-         product_id AS "productId",
-         quantity,
-         unit_price AS "unitPrice"
-       FROM shopping_cart_items
-       WHERE shopping_cart_id = $1`,
+                 product_id AS "productId",
+                 quantity,
+                 unit_price AS "unitPrice"
+             FROM shopping_cart_items
+             WHERE shopping_cart_id = $1`,
             [cartId]
         );
 
@@ -141,8 +188,8 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
 
         const orderInsert = await orderPool.query(
             `INSERT INTO "order" (buyer_id, currency, shopping_cart_id, subtotal, tax, total)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING
+             VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING
          id,
          buyer_id AS "buyerId",
          subtotal,
@@ -157,8 +204,8 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
         for (const item of items) {
             const productResult = await inventoryPool.query(
                 `SELECT quantity, name
-         FROM product
-         WHERE id = $1`,
+                 FROM product
+                 WHERE id = $1`,
                 [item.productId]
             );
 
@@ -172,11 +219,11 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
 
             const imageResult = await inventoryPool.query(
                 `SELECT
-           COALESCE(
-             (SELECT image_url
-              FROM product_image
-              WHERE product_id = $1
-              LIMIT 1),
+                     COALESCE(
+                             (SELECT image_url
+                              FROM product_image
+                              WHERE product_id = $1
+                             LIMIT 1),
              '/images/default-product.png'
            ) AS "imageUrl"`,
                 [item.productId]
@@ -189,8 +236,8 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
 
             await orderPool.query(
                 `INSERT INTO completed_order_items
-           (order_id, product_id, quantity, unit_price, name, image_url)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+                     (order_id, product_id, quantity, unit_price, name, image_url)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
                 [
                     orderId,
                     item.productId,
@@ -203,10 +250,10 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
 
             const updateResult = await inventoryPool.query(
                 `UPDATE product
-         SET quantity = quantity - $1
-         WHERE id = $2
-           AND quantity >= $1
-         RETURNING id`,
+                 SET quantity = quantity - $1
+                 WHERE id = $2
+                   AND quantity >= $1
+                     RETURNING id`,
                 [item.quantity, item.productId]
             );
 
@@ -229,49 +276,6 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Internal server error" });
-    }
-});
-
-router.get("/mine", requireAuth, requireRole("buyer"), async (req: Request, res: Response) => {
-    const pool = getPool();
-    const buyerId = (req as any).user.sub;
-
-    try {
-        const ordersResult = await pool.query(
-            `SELECT
-         o.id,
-         o.subtotal,
-         o.tax,
-         o.total,
-         o.created_at AS "createdAt"
-       FROM "order" o
-       WHERE o.buyer_id = $1
-       ORDER BY o.created_at DESC`,
-            [buyerId]
-        );
-
-        const orders = ordersResult.rows;
-
-        for (const order of orders) {
-            const itemsResult = await pool.query(
-                `SELECT
-           coi.product_id AS "productId",
-           coi.quantity,
-           coi.unit_price AS "unitPrice",
-           coi.name,
-           coi.image_url AS "imageUrl"
-         FROM completed_order_items coi
-         WHERE coi.order_id = $1`,
-                [order.id]
-            );
-
-            order.items = itemsResult.rows;
-        }
-
-        res.json(orders);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to load orders" });
     }
 });
 
