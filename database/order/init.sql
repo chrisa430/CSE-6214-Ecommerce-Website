@@ -66,7 +66,7 @@ INSERT INTO payment_method_type (name, short_desc, long_desc) VALUES
 -- ── Core tables ────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS "order" (
-    id               UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+                                       id               UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
     buyer_id         UUID           NOT NULL,       -- FK to account.account (cross-DB ref, enforced by app)
     currency         UUID           NOT NULL REFERENCES currency_type(id),
     shopping_cart_id UUID           NOT NULL,       -- FK to shopping_cart.shopping_cart (cross-DB ref, enforced by app)
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS "order" (
     status_id        UUID           NOT NULL REFERENCES order_status(id),
     created_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW()
-);
+    );
 
 CREATE INDEX idx_order_buyer_id        ON "order"(buyer_id);
 CREATE INDEX idx_order_shopping_cart   ON "order"(shopping_cart_id);
@@ -146,39 +146,3 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_order_updated_at
     BEFORE UPDATE ON "order"
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
--- ── Return functionality ────────────────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS return_status (
-    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       VARCHAR(64) NOT NULL UNIQUE,
-    short_desc VARCHAR(128),
-    long_desc  TEXT
-);
-
-INSERT INTO return_status (name, short_desc, long_desc) VALUES
-  ('pending',   'Pending',   'Return request submitted, awaiting seller response'),
-  ('approved',  'Approved',  'Return approved by seller'),
-  ('rejected',  'Rejected',  'Return rejected by seller'),
-  ('completed', 'Completed', 'Return fully processed and refunded'),
-  ('disputed',  'Disputed',  'Return disputed by seller — escalated to admin')
-ON CONFLICT DO NOTHING;
-
-CREATE TABLE IF NOT EXISTS return_request (
-    id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id      UUID         NOT NULL REFERENCES "order"(id) ON DELETE CASCADE,
-    order_item_id UUID         NOT NULL REFERENCES completed_order_items(id) ON DELETE CASCADE,
-    buyer_id      UUID         NOT NULL,   -- cross-DB ref to account.account
-    seller_id     UUID         NOT NULL,   -- cross-DB ref to account.account
-    product_id    UUID         NOT NULL,   -- cross-DB ref to inventory.product
-    product_name  VARCHAR(255),
-    status_id     UUID         NOT NULL REFERENCES return_status(id),
-    reason        TEXT,
-    seller_notes  TEXT,           -- seller's note when approving, declining, or disputing
-    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_return_order_id  ON return_request(order_id);
-CREATE INDEX idx_return_buyer_id  ON return_request(buyer_id);
-CREATE INDEX idx_return_seller_id ON return_request(seller_id);
-CREATE INDEX idx_return_status_id ON return_request(status_id);
