@@ -15,6 +15,7 @@ const adminApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Seller-facing inventory API (InventoryService — product CRUD for sellers)
 const inventoryApi = axios.create({
   baseURL: "/api/inventory",
   headers: { "Content-Type": "application/json" },
@@ -30,8 +31,14 @@ const orderApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Admin-facing inventory API (AdminService — product management endpoints)
+const adminProductApi = axios.create({
+  baseURL: "/api/admin",
+  headers: { "Content-Type": "application/json" },
+});
+
 // Attach JWT to every authenticated request automatically
-[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi].forEach((instance) => {
+[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi, adminProductApi].forEach((instance) => {
   instance.interceptors.request.use((config) => {
     const token = localStorage.getItem("accessToken");
     if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -109,7 +116,7 @@ export function extractApiError(err: unknown): string {
   return "An unexpected error occurred.";
 }
 
-// ── Inventory endpoints ─────────────────────────────────────────────────────
+// ── Inventory endpoints (seller-facing) ────────────────────────────────────
 
 export interface Product {
   id: string;
@@ -150,7 +157,7 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
 }
 
 export async function getCategories(): Promise<Category[]> {
-  const { data } = await inventoryApi.get<Category[]>("/products/categories");
+  const { data } = await inventoryApi.get<Category[]>("/categories");
   return data;
 }
 
@@ -178,7 +185,7 @@ export async function getActiveProducts(): Promise<Product[]> {
   return data;
 }
 
-// ── Admin endpoints ─────────────────────────────────────────────────────────
+// ── Admin endpoints — account management ───────────────────────────────────
 
 export interface OpenAccount {
   id: string;
@@ -195,7 +202,7 @@ export interface PendingProduct {
   name: string;
   sellerId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   status: string;
   imageUrl?: string;
   createdAt: string;
@@ -238,7 +245,7 @@ export async function submitProductDecision(
 export interface CartItem {
   productId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   name?: string;
   imageUrl?: string;
 }
@@ -279,20 +286,245 @@ export async function checkout(): Promise<OrderResponse> {
   return data;
 }
 
+export interface OrderItem {
+  id?:        string;   // completed_order_items.id
+  productId:  string;
+  quantity:   number;
+  unitPrice?: number;
+  name?:      string;
+  imageUrl?:  string;
+}
+
 export interface Order {
-  id: string;
-  subtotal: number;
-  tax: number;
-  total: number;
+  id:        string;
+  subtotal:  number;
+  tax:       number;
+  total:     number;
+  status?:   string;
   createdAt: string;
-  items: {
-    productId: string;
-    quantity: number;
-    unitPrice: number;
-  }[];
+  items:     OrderItem[];
 }
 
 export async function getMyOrders(): Promise<Order[]> {
   const { data } = await orderApi.get<Order[]>("/mine");
+  return data;
+}
+
+// ── Admin endpoints — account search (sportvault) ──────────────────────────
+
+/** Full account record returned by GET /accounts/search */
+export interface AccountRecord {
+  id:             string;
+  userId:         string;
+  firstName:      string;
+  lastName:       string;
+  type:           string;
+  status:         string;
+  activatedDate:  string | null;
+  suspendedDate:  string | null;
+  closedDate:     string | null;
+  createdAt:      string;
+}
+
+export interface AccountSearchParams {
+  type?:      string;
+  status?:    string;
+  sortBy?:    "activated_date" | "suspended_date" | "closed_date" | "created_at";
+  sortOrder?: "asc" | "desc";
+}
+
+/** Search / filter / sort all accounts — admin only */
+export async function searchAccounts(
+  params: AccountSearchParams = {}
+): Promise<AccountRecord[]> {
+  const { data } = await accountApi.get<AccountRecord[]>("/search", { params });
+  return data;
+}
+
+// ── Admin endpoints — product management (sportvault) ──────────────────────
+// These call AdminService (/api/admin) which cross-queries the inventory DB.
+// Uses adminProductApi (baseURL: /api/admin) to avoid collision with the
+// seller-facing inventoryApi (baseURL: /api/inventory) above.
+
+/** Summary row returned by GET /admin/products */
+export interface ProductSummary {
+  id:               string;
+  sellerId:         string;
+  sellerFirstName:  string;
+  sellerLastName:   string;
+  name:             string;
+  category:         string;
+  categoryCode:     string;
+  subcategory:      string | null;
+  subcategoryCode:  string | null;
+  status:           string;
+  statusCode:       string;
+  quantity:         number;
+  createdAt:        string;
+  updatedAt:        string;
+}
+
+/** Image record nested inside ProductDetail */
+export interface ProductImage {
+  id:        string;
+  name:      string | null;
+  shortDesc: string | null;
+  imageUrl:  string;
+  sortOrder: number;
+  isPrimary: boolean;
+}
+
+/** Full detail record returned by GET /admin/products/:id */
+export interface ProductDetail extends ProductSummary {
+  shortDesc:       string | null;
+  longDesc:        string | null;
+  teamName:        string | null;
+  playerName:      string | null;
+  gender:          string | null;
+  isSigned:        boolean;
+  isAuthenticated: boolean;
+  isFramed:        boolean;
+  hasInscription:  boolean;
+  inscriptionText: string | null;
+  hasMultiSigs:    boolean;
+  isProtected:     boolean;
+  protectionType:  string | null;
+  condition:       string | null;
+  conditionCode:   string | null;
+  sellerEmail:     string;
+  images:          ProductImage[];
+}
+
+/** Fetch all products — admin only */
+export async function fetchProducts(): Promise<ProductSummary[]> {
+  const { data } = await adminProductApi.get<ProductSummary[]>("/products");
+  return data;
+}
+
+/** Fetch full product detail — admin only */
+export async function fetchProductDetail(id: string): Promise<ProductDetail> {
+  const { data } = await adminProductApi.get<ProductDetail>(`/products/${id}`);
+  return data;
+}
+
+/** Bulk set product status — admin only */
+export async function updateProductStatus(
+  productIds: string[],
+  status:     "active" | "suspended"
+): Promise<{ message: string; count: number }> {
+  const { data } = await adminProductApi.post<{ message: string; count: number }>(
+    "/products/status",
+    { productIds, status }
+  );
+  return data;
+}
+
+// ── Admin endpoints — order maintenance ─────────────────────────────────────
+
+export interface OrderConfig {
+  config: Record<string, string>;
+  rows: {
+    key: string;
+    value: string;
+    description: string;
+    updatedAt: string;
+  }[];
+}
+
+export interface AdminOrder {
+  id: string;
+  buyerFirstName: string;
+  buyerLastName: string;
+  sellerNames: string[];
+  total: number;
+  status: string;
+  createdAt: string;
+}
+
+/** Fetch order configuration values from the admin service */
+export async function getOrderConfig(): Promise<OrderConfig> {
+  const { data } = await adminApi.get<OrderConfig>("/orders/config");
+  return data;
+}
+
+/** Persist a single order configuration key/value */
+export async function updateOrderConfig(
+  key: string,
+  value: string
+): Promise<{ message: string; key: string; value: string }> {
+  const { data } = await adminApi.put<{ message: string; key: string; value: string }>(
+    "/orders/config",
+    { key, value }
+  );
+  return data;
+}
+
+/** Fetch all orders in the system — admin only */
+export async function getAdminOrders(): Promise<AdminOrder[]> {
+  const { data } = await adminApi.get<AdminOrder[]>("/orders");
+  return data;
+}
+
+// ── Return functionality ─────────────────────────────────────────────────────
+
+export interface ReturnRequest {
+  id:           string;
+  orderId:      string;
+  orderItemId:  string;
+  productId:    string;
+  productName:  string;
+  reason:       string | null;
+  status:       string;
+  createdAt:    string;
+}
+
+export interface SellerReturnRow {
+  orderId:        string;
+  total:          number;
+  orderCreatedAt: string;
+  orderStatus:    string;
+  itemId:         string;
+  productId:      string;
+  productName:    string;
+  quantity:       number;
+  unitPrice:      number;
+  imageUrl:       string | null;
+  returnId:       string | null;
+  returnStatus:   string | null;
+  returnReason:   string | null;
+  returnCreatedAt:string | null;
+  buyerId:        string | null;
+  sellerNotes:    string | null;
+}
+
+/** Buyer: get all their return requests */
+export async function getMyReturns(): Promise<ReturnRequest[]> {
+  const { data } = await orderApi.get<ReturnRequest[]>("/returns/mine");
+  return data;
+}
+
+/** Seller: get all their orders + any return requests */
+export async function getSellerReturns(): Promise<SellerReturnRow[]> {
+  const { data } = await orderApi.get<SellerReturnRow[]>("/returns/seller");
+  return data;
+}
+
+/** Buyer: initiate a return for one item from an order */
+export async function requestReturn(
+  orderId: string,
+  orderItemId: string,
+  reason?: string
+): Promise<{ message: string; returnId: string; status: string }> {
+  const { data } = await orderApi.post(`/${orderId}/return`, { orderItemId, reason });
+  return data;
+}
+
+/** Seller: bulk approve, decline, or dispute return requests */
+export async function actionReturn(
+  returnIds: string[],
+  action:    "approved" | "declined" | "disputed",
+  notes?:    string
+): Promise<{ message: string; action: string; updated: number }> {
+  const { data } = await orderApi.put("/returns/action", { returnIds, action, notes });
   return data;
 }

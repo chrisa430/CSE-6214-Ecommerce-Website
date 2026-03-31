@@ -44,6 +44,7 @@ export default function SellerLayout() {
             <NavItem to="/seller">Dashboard</NavItem>
             <NavItem to="/seller/profile">Account Profile</NavItem>
             <NavItem to="/seller/inventory">Inventory</NavItem>
+            <NavItem to="/seller/returns">Returns</NavItem>
           </nav>
 
           <div style={{ flex: 1 }} />

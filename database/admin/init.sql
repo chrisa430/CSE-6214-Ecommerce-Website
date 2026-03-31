@@ -126,3 +126,35 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_decision_updated_at
 BEFORE UPDATE ON decision
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── System configuration ────────────────────────────────────────────────────
+-- Stores admin-managed platform configuration values.
+
+CREATE TABLE IF NOT EXISTS system_config (
+    key         VARCHAR(128) PRIMARY KEY,
+    value       TEXT         NOT NULL,
+    description TEXT,
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO system_config (key, value, description) VALUES
+  ('order_age', '60', 'Number of days a buyer has to return an item from a completed order')
+ON CONFLICT DO NOTHING;
+
+-- ── Return notification types ────────────────────────────────────────────────
+INSERT INTO notification_type (name, short_desc, long_desc) VALUES
+  ('return_initiated_buyer',  'Return Initiated — Buyer',  'Confirmation to buyer that their return request has been received'),
+  ('return_initiated_seller', 'Return Initiated — Seller', 'Notification to seller of a return request for their item'),
+  ('return_initiated_admin',  'Return Initiated — Admin',  'Notification to admins that a return has been initiated')
+ON CONFLICT DO NOTHING;
+
+-- ── Return action notification types (seller decisions) ─────────────────────
+INSERT INTO notification_type (name, short_desc, long_desc) VALUES
+  ('return_approved_seller',  'Return Approved — Seller Confirmation',  'Seller confirmation that they approved a return'),
+  ('return_approved_buyer',   'Return Approved — Buyer Notification',   'Buyer notification that their return was approved'),
+  ('return_declined_seller',  'Return Declined — Seller Confirmation',  'Seller confirmation that they declined a return'),
+  ('return_declined_buyer',   'Return Declined — Buyer Notification',   'Buyer notification that their return was declined'),
+  ('return_disputed_seller',  'Return Disputed — Seller Confirmation',  'Seller confirmation that they disputed a return'),
+  ('return_disputed_buyer',   'Return Disputed — Buyer Notification',   'Buyer notification that their return has been disputed'),
+  ('return_action_admin',     'Return Action — Admin Alert',            'Admin alert when a seller declines or disputes a return')
+ON CONFLICT DO NOTHING;
