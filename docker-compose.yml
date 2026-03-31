@@ -214,6 +214,12 @@ services:
       INTERNAL_SECRET: internal-secret
       APP_BASE_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
+      # Seed credentials — sourced from .env at the project root (never hardcoded)
+      SEED_PASSWORD: ${SEED_PASSWORD}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_FIRST: ${ADMIN_FIRST}
+      ADMIN_LAST: ${ADMIN_LAST}
     ports:
       - "3002:3002"
     depends_on:

@@ -13,7 +13,12 @@ import { logger }                     from "../logger";
 
 const router        = Router();
 const BCRYPT_ROUNDS = 12;
-const SEED_PASSWORD = "Seed-1234!";
+
+// ── Seed password — must be supplied via environment; never hard-coded ─────────
+if (!process.env.SEED_PASSWORD) {
+  throw new Error("SEED_PASSWORD environment variable is required but not set.");
+}
+const SEED_PASSWORD = process.env.SEED_PASSWORD;
 
 // ── Internal-secret guard ─────────────────────────────────────────────────────
 
@@ -183,10 +188,16 @@ router.post(
   requireInternalSecret as any,
   async (_req: Request, res: Response): Promise<void> => {
     const pool         = getPool();
-    const adminEmail   = (process.env.ADMIN_EMAIL    || "Darrell.Hobson@gmail.com").toLowerCase();
-    const adminPass    =  process.env.ADMIN_PASSWORD || "!982AtCLUiNY";
-    const adminFirst   =  process.env.ADMIN_FIRST    || "Darrell";
-    const adminLast    =  process.env.ADMIN_LAST     || "Hobson";
+
+    // All admin seed credentials must come from the environment — no hardcoded fallbacks.
+    if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+      res.status(500).json({ error: "ADMIN_EMAIL and ADMIN_PASSWORD env vars are required for seeding." });
+      return;
+    }
+    const adminEmail   = process.env.ADMIN_EMAIL.toLowerCase();
+    const adminPass    = process.env.ADMIN_PASSWORD;
+    const adminFirst   = process.env.ADMIN_FIRST ?? "Admin";
+    const adminLast    = process.env.ADMIN_LAST  ?? "User";
     try {
       const existing = await pool.query("SELECT id FROM account WHERE user_id = $1", [adminEmail]);
       if (existing.rowCount && existing.rowCount > 0) {
