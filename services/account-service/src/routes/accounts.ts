@@ -2,7 +2,7 @@
  * @fileoverview Account route handlers
  * @module accounts.ts
  * @author Darrell Hobson
- * @Date 2026.03.05
+ * @Date 2026.03.30
  */
 import { Router, Request, Response } from "express";
 import bcrypt                         from "bcrypt";
