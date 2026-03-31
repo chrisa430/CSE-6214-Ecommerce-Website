@@ -13,6 +13,7 @@ import rateLimit from "express-rate-limit";
 
 import { testConnection } from "./db/pool";
 import { getProducer }   from "./kafka/client";
+import { startConsumer } from "./kafka/consumer";
 import accountRoutes     from "./routes/accounts";
 import { logger }        from "./logger";
 
@@ -164,9 +165,12 @@ async function bootstrap(): Promise<void> {
   try {
     await waitForDb();
     await waitForKafka();
-    app.listen(PORT, () =>
-      logger.info(`\n🚀  AccountService ready → http://localhost:${PORT}\n`)
-    );
+    app.listen(PORT, () => {
+      logger.info(`\n🚀  AccountService ready → http://localhost:${PORT}\n`);
+      startConsumer().catch((err) =>
+        logger.error("Kafka consumer failed to start", err)
+      );
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error(`\n❌  Fatal: ${msg}`);

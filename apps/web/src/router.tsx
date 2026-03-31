@@ -6,6 +6,8 @@ import Register from "./pages/Register";
 import AdminLayout   from "./layouts/AdminLayout";
 import AdminHome     from "./pages/admin/AdminHome";
 import AdminSubpage  from "./pages/admin/AdminSubpage";
+import AdminProducts      from "./pages/admin/AdminProducts";
+import AdminProductDetail from "./pages/admin/AdminProductDetail";
 
 import BuyerLayout   from "./layouts/BuyerLayout";
 import BuyerHome     from "./pages/buyer/BuyerHome";
@@ -32,6 +34,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true,          element: <AdminHome /> },
       { path: "subpage",      element: <AdminSubpage /> },
+      { path: "products",         element: <AdminProducts /> },
+      { path: "products/:id",     element: <AdminProductDetail /> },
     ],
   },
 

@@ -16,8 +16,9 @@ import helmet        from "helmet";
 import cors          from "cors";
 import rateLimit     from "express-rate-limit";
 
-import { testConnection }         from "./db/pool";
-import { testAccountConnection }  from "./db/accountPool";
+import { testConnection }           from "./db/pool";
+import { testAccountConnection }    from "./db/accountPool";
+import { testInventoryConnection }  from "./db/inventoryPool";
 import { getProducer }            from "./kafka/client";
 import { startConsumer }          from "./kafka/consumer";
 import adminRoutes                from "./routes/admin";
@@ -134,22 +135,26 @@ async function waitForKafka(maxAttempts = 8, delayMs = 4000): Promise<void> {
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 async function bootstrap(): Promise<void> {
-  const adminDbHost   = process.env.DB_HOST           || "localhost";
-  const adminDbPort   = parseInt(process.env.DB_PORT  || "5434");
-  const accountDbHost = process.env.ACCOUNT_DB_HOST   || "localhost";
-  const accountDbPort = parseInt(process.env.ACCOUNT_DB_PORT || "5433");
-  const kafka         = process.env.KAFKA_BROKERS     || "localhost:9092";
+  const adminDbHost      = process.env.DB_HOST                || "localhost";
+  const adminDbPort      = parseInt(process.env.DB_PORT       || "5434");
+  const accountDbHost    = process.env.ACCOUNT_DB_HOST        || "localhost";
+  const accountDbPort    = parseInt(process.env.ACCOUNT_DB_PORT || "5433");
+  const inventoryDbHost  = process.env.INVENTORY_DB_HOST      || "localhost";
+  const inventoryDbPort  = parseInt(process.env.INVENTORY_DB_PORT || "5437");
+  const kafka            = process.env.KAFKA_BROKERS          || "localhost:9092";
 
   logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   logger.info("  AdminService — startup");
-  logger.info(`  Admin DB   → ${adminDbHost}:${adminDbPort}/admin`);
-  logger.info(`  Account DB → ${accountDbHost}:${accountDbPort}/account`);
-  logger.info(`  Kafka      → ${kafka}`);
+  logger.info(`  Admin DB      → ${adminDbHost}:${adminDbPort}/admin`);
+  logger.info(`  Account DB    → ${accountDbHost}:${accountDbPort}/account`);
+  logger.info(`  Inventory DB  → ${inventoryDbHost}:${inventoryDbPort}/inventory`);
+  logger.info(`  Kafka         → ${kafka}`);
   logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
   try {
-    await waitForDb("AdminDB",   adminDbHost,   adminDbPort,   testConnection);
-    await waitForDb("AccountDB", accountDbHost, accountDbPort, testAccountConnection);
+    await waitForDb("AdminDB",     adminDbHost,     adminDbPort,     testConnection);
+    await waitForDb("AccountDB",   accountDbHost,   accountDbPort,   testAccountConnection);
+    await waitForDb("InventoryDB", inventoryDbHost, inventoryDbPort, testInventoryConnection);
     await waitForKafka();
 
     app.listen(PORT, () => {

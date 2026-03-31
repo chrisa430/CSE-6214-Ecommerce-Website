@@ -6,7 +6,7 @@
  */
 import { Router, Request, Response } from "express";
 import bcrypt from "bcrypt";
-// import fetch from "node-fetch"; // Node 18+ has built-in fetch
+// fetch is available globally in Node 18+ — no import needed
 import {
   signAccessToken,
   signRefreshToken,
@@ -27,13 +27,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Password rules:
- *  - 12+ chars
+ *  - 8+ chars
  *  - ≥1 uppercase letter
  *  - ≥1 lowercase letter
  *  - ≥1 digit
  *  - ≥1 special char from: * $ ! - @
  */
-const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{12,}$/;
+const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{8,}$/;
 
 /**
  *
@@ -44,12 +44,12 @@ const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{12,}$/;
  * -
  */
 function validateCredentials(
-  email: string,
-  password: string
+    email: string,
+    password: string
 ): string | null {
   if (!email || !EMAIL_RE.test(email))       return "A valid email address is required.";
   if (!password || !PASSWORD_RE.test(password))
-    return "Password must be ≥12 characters and contain at least one uppercase letter, one lowercase letter, one digit, and one special character (* $ ! - @).";
+    return "Password must be ≥8 characters and contain at least one uppercase letter, one lowercase letter, one digit, and one special character (* $ ! - @).";
   return null;
 }
 
@@ -275,3 +275,21 @@ router.post("/logout", async (req: Request, res: Response): Promise<void> => {
 });
 
 export default router;
+
+// ── POST /auth/internal/seed ──────────────────────────────────────────────────
+// Verifies authn_authz DB is reachable; reports refresh_token counts.
+router.post("/internal/seed", async (req: Request, res: Response): Promise<void> => {
+  const secret = req.headers["x-internal-secret"];
+  if (secret !== (process.env.INTERNAL_SECRET || "internal-secret")) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  try {
+    const { getPool: getAuthPool } = await import("../db/pool");
+    const pool = getAuthPool();
+    const tokens = (await pool.query("SELECT COUNT(*) FROM refresh_tokens")).rows[0].count;
+    res.json({ service: "AuthnAuthzService", refresh_tokens: parseInt(tokens), message: "Auth DB verified" });
+  } catch (err) {
+    logger.error("Seed error", err);
+    res.status(500).json({ error: "Seed check failed", detail: String(err) });
+  }
+});

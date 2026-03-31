@@ -15,6 +15,7 @@ const adminApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Seller-facing inventory API (InventoryService — product CRUD for sellers)
 const inventoryApi = axios.create({
   baseURL: "/api/inventory",
   headers: { "Content-Type": "application/json" },
@@ -30,8 +31,14 @@ const orderApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Admin-facing inventory API (AdminService — product management endpoints)
+const adminProductApi = axios.create({
+  baseURL: "/api/admin",
+  headers: { "Content-Type": "application/json" },
+});
+
 // Attach JWT to every authenticated request automatically
-[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi].forEach((instance) => {
+[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi, adminProductApi].forEach((instance) => {
   instance.interceptors.request.use((config) => {
     const token = localStorage.getItem("accessToken");
     if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -109,7 +116,7 @@ export function extractApiError(err: unknown): string {
   return "An unexpected error occurred.";
 }
 
-// ── Inventory endpoints ─────────────────────────────────────────────────────
+// ── Inventory endpoints (seller-facing) ────────────────────────────────────
 
 export interface Product {
   id: string;
@@ -150,7 +157,7 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
 }
 
 export async function getCategories(): Promise<Category[]> {
-  const { data } = await inventoryApi.get<Category[]>("/products/categories");
+  const { data } = await inventoryApi.get<Category[]>("/categories");
   return data;
 }
 
@@ -178,7 +185,7 @@ export async function getActiveProducts(): Promise<Product[]> {
   return data;
 }
 
-// ── Admin endpoints ─────────────────────────────────────────────────────────
+// ── Admin endpoints — account management ───────────────────────────────────
 
 export interface OpenAccount {
   id: string;
@@ -195,7 +202,7 @@ export interface PendingProduct {
   name: string;
   sellerId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   status: string;
   imageUrl?: string;
   createdAt: string;
@@ -238,7 +245,7 @@ export async function submitProductDecision(
 export interface CartItem {
   productId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   name?: string;
   imageUrl?: string;
 }
@@ -288,11 +295,120 @@ export interface Order {
   items: {
     productId: string;
     quantity: number;
-    unitPrice: number;
+    unitPrice?: number;
   }[];
 }
 
 export async function getMyOrders(): Promise<Order[]> {
   const { data } = await orderApi.get<Order[]>("/mine");
+  return data;
+}
+
+// ── Admin endpoints — account search (sportvault) ──────────────────────────
+
+/** Full account record returned by GET /accounts/search */
+export interface AccountRecord {
+  id:             string;
+  userId:         string;
+  firstName:      string;
+  lastName:       string;
+  type:           string;
+  status:         string;
+  activatedDate:  string | null;
+  suspendedDate:  string | null;
+  closedDate:     string | null;
+  createdAt:      string;
+}
+
+export interface AccountSearchParams {
+  type?:      string;
+  status?:    string;
+  sortBy?:    "activated_date" | "suspended_date" | "closed_date" | "created_at";
+  sortOrder?: "asc" | "desc";
+}
+
+/** Search / filter / sort all accounts — admin only */
+export async function searchAccounts(
+  params: AccountSearchParams = {}
+): Promise<AccountRecord[]> {
+  const { data } = await accountApi.get<AccountRecord[]>("/search", { params });
+  return data;
+}
+
+// ── Admin endpoints — product management (sportvault) ──────────────────────
+// These call AdminService (/api/admin) which cross-queries the inventory DB.
+// Uses adminProductApi (baseURL: /api/admin) to avoid collision with the
+// seller-facing inventoryApi (baseURL: /api/inventory) above.
+
+/** Summary row returned by GET /admin/products */
+export interface ProductSummary {
+  id:               string;
+  sellerId:         string;
+  sellerFirstName:  string;
+  sellerLastName:   string;
+  name:             string;
+  category:         string;
+  categoryCode:     string;
+  subcategory:      string | null;
+  subcategoryCode:  string | null;
+  status:           string;
+  statusCode:       string;
+  quantity:         number;
+  createdAt:        string;
+  updatedAt:        string;
+}
+
+/** Image record nested inside ProductDetail */
+export interface ProductImage {
+  id:        string;
+  name:      string | null;
+  shortDesc: string | null;
+  imageUrl:  string;
+  sortOrder: number;
+  isPrimary: boolean;
+}
+
+/** Full detail record returned by GET /admin/products/:id */
+export interface ProductDetail extends ProductSummary {
+  shortDesc:       string | null;
+  longDesc:        string | null;
+  teamName:        string | null;
+  playerName:      string | null;
+  gender:          string | null;
+  isSigned:        boolean;
+  isAuthenticated: boolean;
+  isFramed:        boolean;
+  hasInscription:  boolean;
+  inscriptionText: string | null;
+  hasMultiSigs:    boolean;
+  isProtected:     boolean;
+  protectionType:  string | null;
+  condition:       string | null;
+  conditionCode:   string | null;
+  sellerEmail:     string;
+  images:          ProductImage[];
+}
+
+/** Fetch all products — admin only */
+export async function fetchProducts(): Promise<ProductSummary[]> {
+  const { data } = await adminProductApi.get<ProductSummary[]>("/products");
+  return data;
+}
+
+/** Fetch full product detail — admin only */
+export async function fetchProductDetail(id: string): Promise<ProductDetail> {
+  const { data } = await adminProductApi.get<ProductDetail>(`/products/${id}`);
+  return data;
+}
+
+/** Bulk set product status — admin only */
+export async function updateProductStatus(
+  productIds: string[],
+  status:     "active" | "suspended"
+): Promise<{ message: string; count: number }> {
+  const { data } = await adminProductApi.post<{ message: string; count: number }>(
+    "/products/status",
+    { productIds, status }
+  );
   return data;
 }

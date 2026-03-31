@@ -37,6 +37,7 @@ export default function AdminLayout() {
           <nav className="col" style={{ gap: 10 }}>
             <NavItem to="/admin">Dashboard</NavItem>
             <NavItem to="/admin/subpage">Admin Tools</NavItem>
+            <NavItem to="/admin/products">Product Inventory</NavItem>
             <NavItem to="/admin/subpage#users">User Management</NavItem>
             <NavItem to="/admin/subpage#approvals">Account Approvals</NavItem>
             <NavItem to="/admin/subpage#returns">Return Facilitation</NavItem>
