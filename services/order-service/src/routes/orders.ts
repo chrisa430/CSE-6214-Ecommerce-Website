@@ -11,6 +11,8 @@ import { getCartPool } from "../db/cartPool";
 import { requireAuth } from "../middleware/authGuard";
 import { requireRole } from "../middleware/requireRole";
 import { getInventoryPool } from "../db/inventoryPool";
+import { getAdminPool }    from "../db/adminPool";
+import { getAccountPool }  from "../db/accountPool";
 
 const router = Router();
 

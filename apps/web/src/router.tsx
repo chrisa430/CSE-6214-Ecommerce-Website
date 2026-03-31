@@ -16,12 +16,15 @@ import BuyerCart from "./pages/buyer/BuyerCart";
 import BuyerCheckout from "./pages/buyer/BuyerCheckout";
 import BuyerProfile from "./pages/buyer/BuyerProfile";
 import BuyerOrders from "./pages/buyer/BuyerOrders";
+import BuyerOrderDetail from "./pages/buyer/BuyerOrderDetail";
+import BuyerReturns from "./pages/buyer/BuyerReturns";
 
 import SellerLayout  from "./layouts/SellerLayout";
 import SellerHome    from "./pages/seller/SellerHome";
 import SellerSubpage from "./pages/seller/SellerSubpage";
 import InventoryManagement from "./pages/seller/InventoryManagement";
 import SellerProfile from "./pages/seller/SellerProfile";
+import SellerReturns from "./pages/seller/SellerReturns";
 
 export const router = createBrowserRouter([
   { path: "/",        element: <Navigate to="/login" replace /> },
@@ -48,7 +51,9 @@ export const router = createBrowserRouter([
       { path: "cart", element: <BuyerCart /> },
       { path: "checkout", element: <BuyerCheckout /> },
       { path: "profile", element: <BuyerProfile /> },
-      { path: "orders", element: <BuyerOrders /> },
+      { path: "orders",             element: <BuyerOrders /> },
+      { path: "orders/:orderId",    element: <BuyerOrderDetail /> },
+      { path: "returns",            element: <BuyerReturns /> },
     ],
   },
 
@@ -59,7 +64,8 @@ export const router = createBrowserRouter([
       { index: true,          element: <SellerHome /> },
       { path: "subpage",      element: <SellerSubpage /> },
       { path: "inventory", element: <InventoryManagement /> },
-      { path: "profile", element: <SellerProfile /> },
+      { path: "profile",   element: <SellerProfile /> },
+      { path: "returns",   element: <SellerReturns /> },
     ],
   },
 ]);

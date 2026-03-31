@@ -286,11 +286,21 @@ export async function checkout(): Promise<OrderResponse> {
   return data;
 }
 
+export interface OrderItem {
+  id?:        string;   // completed_order_items.id
+  productId:  string;
+  quantity:   number;
+  unitPrice?: number;
+  name?:      string;
+  imageUrl?:  string;
+}
+
 export interface Order {
-  id: string;
-  subtotal: number;
-  tax: number;
-  total: number;
+  id:        string;
+  subtotal:  number;
+  tax:       number;
+  total:     number;
+  status?:   string;
   createdAt: string;
   items: {
     productId: string;

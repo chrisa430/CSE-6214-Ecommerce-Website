@@ -73,12 +73,14 @@ CREATE TABLE IF NOT EXISTS "order" (
     subtotal         NUMERIC(10,2)  NOT NULL DEFAULT 0,
     tax              NUMERIC(10,2)  NOT NULL DEFAULT 0,
     total            NUMERIC(10,2)  NOT NULL DEFAULT 0,
+    status_id        UUID           NOT NULL REFERENCES order_status(id),
     created_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMPTZ    NOT NULL DEFAULT NOW()
     );
 
 CREATE INDEX idx_order_buyer_id        ON "order"(buyer_id);
 CREATE INDEX idx_order_shopping_cart   ON "order"(shopping_cart_id);
+CREATE INDEX idx_order_status_id       ON "order"(status_id);
 
 CREATE TABLE IF NOT EXISTS completed_order_items (
                                                      id         UUID           PRIMARY KEY DEFAULT gen_random_uuid(),

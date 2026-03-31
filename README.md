@@ -42,7 +42,7 @@ to ensure that all micro services and database tables are deployed programmatica
 2. docker compose up
 3. npm run dev # in root directory
 
-## Create Admin User
+## Create Admin User and seed database with test data
 When you recreate the environment, you will have to insert an admin record into the account table or else you will not be able to create accounts since the admin has to approve account creation. Kind of a Catch-22.
 
 ### seed-admin.ts
@@ -51,6 +51,7 @@ When you recreate the environment, you will have to insert an admin record into 
 3. change to the scripts directory
 4. npm install
 5. npx ts-node seed-admin.ts
+6. npm run seed:all
 
 ## Notes
 ### Email Notifications
