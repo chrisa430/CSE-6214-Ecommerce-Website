@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { checkout, getCart, CartItem } from "../../services/api";
 
 export default function BuyerCheckout() {
+  const navigate = useNavigate();
+
   const [items, setItems] = useState<CartItem[]>([]);
   const [error, setError] = useState("");
 
-  // Form state
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
@@ -43,9 +45,7 @@ export default function BuyerCheckout() {
       await checkout();
 
       alert("✅ Order placed successfully!");
-
-      // optional: redirect later
-      window.location.href = "/buyer/orders";
+      navigate("/buyer/orders");
     } catch (err) {
       console.error(err);
       setError("Checkout failed");
@@ -67,9 +67,7 @@ export default function BuyerCheckout() {
           gap: 20,
         }}
       >
-        {/* LEFT SIDE */}
         <div className="col" style={{ gap: 16 }}>
-          {/* SHIPPING */}
           <div className="card cardPad">
             <div className="h2">Shipping Information</div>
 
@@ -83,7 +81,6 @@ export default function BuyerCheckout() {
             </div>
           </div>
 
-          {/* PAYMENT */}
           <div className="card cardPad">
             <div className="h2">Payment Information</div>
 
@@ -115,7 +112,6 @@ export default function BuyerCheckout() {
           </div>
         </div>
 
-        {/* RIGHT SIDE */}
         <div className="card cardPad">
           <div className="h2">Order Summary</div>
 
