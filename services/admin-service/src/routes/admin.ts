@@ -15,6 +15,7 @@ import { Router, Request, Response } from "express";
 import { getPool }                   from "../db/pool";
 import { getAccountPool }            from "../db/accountPool";
 import { getInventoryPool }          from "../db/inventoryPool";
+import { getOrderPool }              from "../db/orderPool";
 import { publishEvent, TOPICS }      from "../kafka/client";
 import { logger }                    from "../logger";
 
@@ -172,6 +173,7 @@ router.post("/accounts/decision", async (req: Request, res: Response): Promise<v
 });
 
 export default router;
+
 
 // ── GET /admin/products ───────────────────────────────────────────────────────
 /**
@@ -428,3 +430,201 @@ router.post(
     }
   }
 );
+// ═══════════════════════════════════════════════════════════════════════════════
+// ORDER MAINTENANCE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── GET /admin/orders/config ──────────────────────────────────────────────────
+// Returns all system_config rows. ORDER_AGE env var is the runtime default;
+// the DB value takes precedence once an admin saves it.
+router.get("/orders/config", async (_req: Request, res: Response): Promise<void> => {
+  const pool = getPool();
+  try {
+    const result = await pool.query(
+      "SELECT key, value, description, updated_at AS \"updatedAt\" FROM system_config ORDER BY key"
+    );
+    // Merge env-var defaults so the UI always gets a value even on a fresh DB
+    const rows = result.rows as { key: string; value: string; description: string; updatedAt: string }[];
+    const config: Record<string, string> = {
+      order_age: process.env.ORDER_AGE || "60",
+    };
+    for (const row of rows) {
+      config[row.key] = row.value;
+    }
+    res.json({
+      config,
+      rows,    // raw rows for detail (description, updated_at)
+    });
+  } catch (err) {
+    logger.error("Get order config error", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── PUT /admin/orders/config ──────────────────────────────────────────────────
+// Updates a single system_config value.
+// Body: { key: string; value: string }
+router.put("/orders/config", async (req: Request, res: Response): Promise<void> => {
+  const pool = getPool();
+  const { key, value } = req.body as { key?: string; value?: string };
+
+  if (!key || value === undefined) {
+    res.status(400).json({ error: "key and value are required" });
+    return;
+  }
+
+  // Validate known keys
+  const ALLOWED_KEYS = new Set(["order_age"]);
+  if (!ALLOWED_KEYS.has(key)) {
+    res.status(400).json({ error: `Unknown config key: ${key}` });
+    return;
+  }
+
+  // Type-specific validation
+  if (key === "order_age") {
+    const n = parseInt(value, 10);
+    if (isNaN(n) || n < 1 || n > 365) {
+      res.status(400).json({ error: "order_age must be an integer between 1 and 365" });
+      return;
+    }
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO system_config (key, value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [key, value]
+    );
+    logger.info(`[Config] ${key} updated to ${value}`);
+    res.json({ message: "Configuration updated", key, value });
+  } catch (err) {
+    logger.error("Update order config error", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── GET /admin/orders ─────────────────────────────────────────────────────────
+// Returns all orders in the system with buyer name, seller name(s), total, status.
+// Performs cross-DB lookups: order DB → inventory DB (seller_id) → account DB (names).
+router.get("/orders", async (_req: Request, res: Response): Promise<void> => {
+  const orderPool   = getOrderPool();
+  const inventoryPool = getInventoryPool();
+  const accountPool = getAccountPool();
+
+  try {
+    // ── 1. Fetch all orders ──────────────────────────────────────────────────
+    const ordersResult = await orderPool.query(
+      `SELECT
+         o.id,
+         o.buyer_id    AS "buyerId",
+         o.total,
+         os.name       AS status,
+         o.created_at  AS "createdAt"
+       FROM "order" o
+       JOIN order_status os ON os.id = o.status_id
+       ORDER BY o.created_at DESC`
+    );
+    const orders = ordersResult.rows as {
+      id: string;
+      buyerId: string;
+      total: number;
+      status: string;
+      createdAt: string;
+    }[];
+
+    if (orders.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // ── 2. Collect unique buyer IDs and resolve names ────────────────────────
+    const uniqueBuyerIds = [...new Set(orders.map((o) => o.buyerId))];
+    const buyerResult = await accountPool.query(
+      `SELECT id, first_name AS "firstName", last_name AS "lastName"
+       FROM account
+       WHERE id = ANY($1::uuid[])`,
+      [uniqueBuyerIds]
+    );
+    const buyerMap = new Map<string, { firstName: string; lastName: string }>();
+    for (const row of buyerResult.rows) {
+      buyerMap.set(row.id, { firstName: row.firstName, lastName: row.lastName });
+    }
+
+    // ── 3. Fetch completed_order_items for all orders ────────────────────────
+    const orderIds = orders.map((o) => o.id);
+    const itemsResult = await orderPool.query(
+      `SELECT order_id AS "orderId", product_id AS "productId"
+       FROM completed_order_items
+       WHERE order_id = ANY($1::uuid[])`,
+      [orderIds]
+    );
+    // Map orderId → [productId]
+    const orderProducts = new Map<string, string[]>();
+    for (const row of itemsResult.rows) {
+      const existing = orderProducts.get(row.orderId) ?? [];
+      existing.push(row.productId);
+      orderProducts.set(row.orderId, existing);
+    }
+
+    // ── 4. Resolve seller IDs from inventory DB ──────────────────────────────
+    const allProductIds = [...new Set(itemsResult.rows.map((r) => r.productId))];
+    const sellerIdMap = new Map<string, string>(); // productId → sellerId
+
+    if (allProductIds.length > 0) {
+      const sellerResult = await inventoryPool.query(
+        `SELECT id, seller_id AS "sellerId" FROM product WHERE id = ANY($1::uuid[])`,
+        [allProductIds]
+      );
+      for (const row of sellerResult.rows) {
+        sellerIdMap.set(row.id, row.sellerId);
+      }
+    }
+
+    // ── 5. Resolve seller names from account DB ──────────────────────────────
+    const uniqueSellerIds = [...new Set([...sellerIdMap.values()])];
+    const sellerMap = new Map<string, { firstName: string; lastName: string }>();
+
+    if (uniqueSellerIds.length > 0) {
+      const sellerNameResult = await accountPool.query(
+        `SELECT id, first_name AS "firstName", last_name AS "lastName"
+         FROM account
+         WHERE id = ANY($1::uuid[])`,
+        [uniqueSellerIds]
+      );
+      for (const row of sellerNameResult.rows) {
+        sellerMap.set(row.id, { firstName: row.firstName, lastName: row.lastName });
+      }
+    }
+
+    // ── 6. Assemble response ─────────────────────────────────────────────────
+    const response = orders.map((order) => {
+      const buyer = buyerMap.get(order.buyerId);
+      const productIds = orderProducts.get(order.id) ?? [];
+
+      const sellerIds = [...new Set(
+        productIds.map((pid) => sellerIdMap.get(pid)).filter(Boolean) as string[]
+      )];
+
+      const sellerNames = sellerIds.map((sid) => {
+        const s = sellerMap.get(sid);
+        return s ? `${s.firstName} ${s.lastName}` : "Unknown Seller";
+      });
+
+      return {
+        id:              order.id,
+        buyerFirstName:  buyer?.firstName ?? "Unknown",
+        buyerLastName:   buyer?.lastName  ?? "Buyer",
+        sellerNames:     sellerNames.length > 0 ? sellerNames : ["—"],
+        total:           Number(order.total),
+        status:          order.status,
+        createdAt:       order.createdAt,
+      };
+    });
+
+    res.json(response);
+  } catch (err) {
+    logger.error("Get admin orders error", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
