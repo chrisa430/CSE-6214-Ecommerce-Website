@@ -302,11 +302,7 @@ export interface Order {
   total:     number;
   status?:   string;
   createdAt: string;
-  items: {
-    productId: string;
-    quantity: number;
-    unitPrice?: number;
-  }[];
+  items:     OrderItem[];
 }
 
 export async function getMyOrders(): Promise<Order[]> {
@@ -420,5 +416,115 @@ export async function updateProductStatus(
     "/products/status",
     { productIds, status }
   );
+  return data;
+}
+
+// ── Admin endpoints — order maintenance ─────────────────────────────────────
+
+export interface OrderConfig {
+  config: Record<string, string>;
+  rows: {
+    key: string;
+    value: string;
+    description: string;
+    updatedAt: string;
+  }[];
+}
+
+export interface AdminOrder {
+  id: string;
+  buyerFirstName: string;
+  buyerLastName: string;
+  sellerNames: string[];
+  total: number;
+  status: string;
+  createdAt: string;
+}
+
+/** Fetch order configuration values from the admin service */
+export async function getOrderConfig(): Promise<OrderConfig> {
+  const { data } = await adminApi.get<OrderConfig>("/orders/config");
+  return data;
+}
+
+/** Persist a single order configuration key/value */
+export async function updateOrderConfig(
+  key: string,
+  value: string
+): Promise<{ message: string; key: string; value: string }> {
+  const { data } = await adminApi.put<{ message: string; key: string; value: string }>(
+    "/orders/config",
+    { key, value }
+  );
+  return data;
+}
+
+/** Fetch all orders in the system — admin only */
+export async function getAdminOrders(): Promise<AdminOrder[]> {
+  const { data } = await adminApi.get<AdminOrder[]>("/orders");
+  return data;
+}
+
+// ── Return functionality ─────────────────────────────────────────────────────
+
+export interface ReturnRequest {
+  id:           string;
+  orderId:      string;
+  orderItemId:  string;
+  productId:    string;
+  productName:  string;
+  reason:       string | null;
+  status:       string;
+  createdAt:    string;
+}
+
+export interface SellerReturnRow {
+  orderId:        string;
+  total:          number;
+  orderCreatedAt: string;
+  orderStatus:    string;
+  itemId:         string;
+  productId:      string;
+  productName:    string;
+  quantity:       number;
+  unitPrice:      number;
+  imageUrl:       string | null;
+  returnId:       string | null;
+  returnStatus:   string | null;
+  returnReason:   string | null;
+  returnCreatedAt:string | null;
+  buyerId:        string | null;
+  sellerNotes:    string | null;
+}
+
+/** Buyer: get all their return requests */
+export async function getMyReturns(): Promise<ReturnRequest[]> {
+  const { data } = await orderApi.get<ReturnRequest[]>("/returns/mine");
+  return data;
+}
+
+/** Seller: get all their orders + any return requests */
+export async function getSellerReturns(): Promise<SellerReturnRow[]> {
+  const { data } = await orderApi.get<SellerReturnRow[]>("/returns/seller");
+  return data;
+}
+
+/** Buyer: initiate a return for one item from an order */
+export async function requestReturn(
+  orderId: string,
+  orderItemId: string,
+  reason?: string
+): Promise<{ message: string; returnId: string; status: string }> {
+  const { data } = await orderApi.post(`/${orderId}/return`, { orderItemId, reason });
+  return data;
+}
+
+/** Seller: bulk approve, decline, or dispute return requests */
+export async function actionReturn(
+  returnIds: string[],
+  action:    "approved" | "declined" | "disputed",
+  notes?:    string
+): Promise<{ message: string; action: string; updated: number }> {
+  const { data } = await orderApi.put("/returns/action", { returnIds, action, notes });
   return data;
 }
