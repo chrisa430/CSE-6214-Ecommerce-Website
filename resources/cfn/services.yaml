@@ -1,0 +1,129 @@
+# cfn/services.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SportVault — ECS Services
+
+Parameters:
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag to deploy (SHA or 'latest')
+  AppBaseUrl:
+    Type: String
+    Default: http://localhost:5173
+    Description: Frontend URL (used in notification links)
+  CorsOrigin:
+    Type: String
+    Default: https://your-project.vercel.app
+    Description: Allowed CORS origin (your Vercel domain)
+  OrderAge:
+    Type: Number
+    Default: 60
+    Description: Return window in days
+
+Resources:
+
+  # ── ECR Repositories ────────────────────────────────────────────────
+  AuthnECR:
+    Type: AWS::ECR::Repository
+    Properties: {RepositoryName: sportvault/authn-authz-service}
+  AccountECR:
+    Type: AWS::ECR::Repository
+    Properties: {RepositoryName: sportvault/account-service}
+  AdminECR:
+    Type: AWS::ECR::Repository
+    Properties: {RepositoryName: sportvault/admin-service}
+  CartECR:
+    Type: AWS::ECR::Repository
+    Properties: {RepositoryName: sportvault/shopping-cart-service}
+  OrderECR:
+    Type: AWS::ECR::Repository
+    Properties: {RepositoryName: sportvault/order-service}
+  SellerECR:
+    Type: AWS::ECR::Repository
+    Properties: {RepositoryName: sportvault/seller-service}
+  InventoryECR:
+    Type: AWS::ECR::Repository
+    Properties: {RepositoryName: sportvault/inventory-service}
+
+  # ── ECS Cluster ─────────────────────────────────────────────────────
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: sportvault-cluster
+      CapacityProviders: [FARGATE]
+
+  # ── IAM Role for ECS task execution ─────────────────────────────────
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ecs-tasks.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+
+  # ── Example: OrderService task definition ───────────────────────────
+  OrderTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-order
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: order-service
+          Image: !Sub
+            - '${ECR}/sportvault/order-service:${Tag}'
+            - ECR: !ImportValue sportvault-ECRRegistry
+              Tag: !Ref ImageTag
+          PortMappings: [{ContainerPort: 3005}]
+          Environment:
+            - {Name: PORT,         Value: '3005'}
+            - {Name: NODE_ENV,     Value: production}
+            - {Name: ORDER_AGE,    Value: !Sub '${OrderAge}'}
+            - {Name: CORS_ORIGIN,  Value: !Ref CorsOrigin}
+            - {Name: APP_BASE_URL, Value: !Ref AppBaseUrl}
+            - {Name: KAFKA_BROKERS, Value: !ImportValue sportvault-MSKBrokers}
+          Secrets:
+            - Name: DB_HOST
+              ValueFrom: !Sub '${OrderDBSecret}:DB_HOST::'
+            - Name: DB_USER
+              ValueFrom: !Sub '${OrderDBSecret}:DB_USER::'
+            - Name: DB_PASS
+              ValueFrom: !Sub '${OrderDBSecret}:DB_PASS::'
+            - Name: JWT_ACCESS_SECRET
+              ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'
+            # ... CART_DB_*, INVENTORY_DB_*, ADMIN_DB_*, ACCOUNT_DB_*
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/order-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # ── ECS Service for OrderService ─────────────────────────────────────
+  OrderService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: sportvault-order
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref OrderTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets:
+            - !ImportValue sportvault-PrivateSubnet1
+            - !ImportValue sportvault-PrivateSubnet2
+          SecurityGroups: [!ImportValue sportvault-ECSSecurityGroup]
+      LoadBalancers:
+        - ContainerName: order-service
+          ContainerPort: 3005
+          TargetGroupArn: !ImportValue sportvault-OrderTGArn
+
+  # ... repeat TaskDefinition + Service blocks for all 7 services

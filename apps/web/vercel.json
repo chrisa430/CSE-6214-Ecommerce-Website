@@ -1,0 +1,38 @@
+{
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "devCommand": "npm run dev",
+
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options",        "value": "DENY" },
+        { "key": "X-XSS-Protection",       "value": "1; mode=block" },
+        { "key": "Referrer-Policy",         "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ],
+
+  "env": {
+    "VITE_AUTH_API_URL":      "@vite-auth-api-url",
+    "VITE_ACCOUNT_API_URL":   "@vite-account-api-url",
+    "VITE_ADMIN_API_URL":     "@vite-admin-api-url",
+    "VITE_CART_API_URL":      "@vite-cart-api-url",
+    "VITE_ORDER_API_URL":     "@vite-order-api-url",
+    "VITE_INVENTORY_API_URL": "@vite-inventory-api-url"
+  }
+}

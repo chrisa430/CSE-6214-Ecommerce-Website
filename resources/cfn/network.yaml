@@ -1,0 +1,179 @@
+# cfn/network.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SportVault — Network Infrastructure
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: api.sportsvault.co)
+  CertificateArn:
+    Type: String
+    Description: ARN of ACM certificate for your domain
+
+Resources:
+
+  # ── VPC ────────────────────────────────────────────────────────────
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: sportvault-vpc}]
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+
+  # ── Internet Gateway + NAT ──────────────────────────────────────────
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: {VpcId: !Ref VPC, InternetGatewayId: !Ref InternetGateway}
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties: {Domain: vpc}
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  # ── Security Groups ─────────────────────────────────────────────────
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB — allow HTTPS from internet
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 80,  ToPort: 80,  CidrIp: 0.0.0.0/0}
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS tasks — allow from ALB on service ports
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3007
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS — allow from ECS only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+
+  MSKSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MSK — allow from ECS only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 9092
+          ToPort: 9094
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+
+  # ── Application Load Balancer ────────────────────────────────────────
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: sportvault-alb
+      Scheme: internet-facing
+      Subnets: [!Ref PublicSubnet1, !Ref PublicSubnet2]
+      SecurityGroups: [!Ref ALBSecurityGroup]
+
+  HTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 443
+      Protocol: HTTPS
+      Certificates: [{CertificateArn: !Ref CertificateArn}]
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig: {StatusCode: '404', ContentType: text/plain}
+
+  HTTPRedirectListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig: {Protocol: HTTPS, Port: '443', StatusCode: HTTP_301}
+
+  # ── Target Groups (one per service) ─────────────────────────────────
+  AuthnTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: sportvault-authn-tg
+      Port: 3001
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /auth/health
+
+  # ... repeat for AccountTG (3002), AdminTG (3003), CartTG (3004),
+  #     OrderTG (3005), SellerTG (3006), InventoryTG (3007)
+
+  # ── ALB Listener Rules (path-based routing) ──────────────────────────
+  AuthnRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 1
+      Conditions: [{Field: path-pattern, Values: ['/auth/*']}]
+      Actions: [{Type: forward, TargetGroupArn: !Ref AuthnTG}]
+
+  # ... repeat rules for /accounts/*, /admin/*, /cart/*,
+  #     /orders/*, /sellers/*, /inventory/*
+
+Outputs:
+  VPCId:              {Value: !Ref VPC,            Export: {Name: sportvault-VPCId}}
+  PrivateSubnet1:     {Value: !Ref PrivateSubnet1, Export: {Name: sportvault-PrivateSubnet1}}
+  PrivateSubnet2:     {Value: !Ref PrivateSubnet2, Export: {Name: sportvault-PrivateSubnet2}}
+  ECSSecurityGroup:   {Value: !Ref ECSSecurityGroup, Export: {Name: sportvault-ECSSecurityGroup}}
+  RDSSecurityGroup:   {Value: !Ref RDSSecurityGroup, Export: {Name: sportvault-RDSSecurityGroup}}
+  MSKSecurityGroup:   {Value: !Ref MSKSecurityGroup, Export: {Name: sportvault-MSKSecurityGroup}}
+  ALBArn:             {Value: !Ref ALB,            Export: {Name: sportvault-ALBArn}}
+  HTTPSListenerArn:   {Value: !Ref HTTPSListener,  Export: {Name: sportvault-HTTPSListenerArn}}
+  AuthnTGArn:         {Value: !Ref AuthnTG,        Export: {Name: sportvault-AuthnTGArn}}
+  # ... export all seven target group ARNs
