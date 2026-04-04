@@ -242,67 +242,152 @@ router.post(
 );
 
 // ── POST /accounts/internal/seed ─────────────────────────────────────────────
-// Seeds 20 dummy buyer/seller accounts. Idempotent — skips existing emails.
-// Returns buyer_ids array for use by the inventory seed step.
+// Seeds 100 buyers + 25 sellers + 10 admins (135 total). Idempotent.
+// Returns buyer_ids, seller_ids, and admin_ids for downstream seed steps.
+//
+// Buyer/Seller password : SEED_PASSWORD env var
+// Admin password        : ADMIN_SEED_PASSWORD env var (default: Admin1234!)
 
 router.post(
   "/internal/seed",
   requireInternalSecret as any,
   async (_req: Request, res: Response): Promise<void> => {
     const pool = getPool();
-    const USERS = [
-      { email: "james.carter@demo.com",   first: "James",    last: "Carter",   type: "buyer",  status: "active" },
-      { email: "priya.sharma@demo.com",   first: "Priya",    last: "Sharma",   type: "buyer",  status: "active" },
-      { email: "marcus.lewis@demo.com",   first: "Marcus",   last: "Lewis",    type: "buyer",  status: "active" },
-      { email: "sophia.chen@demo.com",    first: "Sophia",   last: "Chen",     type: "buyer",  status: "active" },
-      { email: "ethan.brown@demo.com",    first: "Ethan",    last: "Brown",    type: "buyer",  status: "active" },
-      { email: "ava.robinson@demo.com",   first: "Ava",      last: "Robinson", type: "buyer",  status: "active" },
-      { email: "mason.clark@demo.com",    first: "Mason",    last: "Clark",    type: "buyer",  status: "active" },
-      { email: "abigail.harris@demo.com", first: "Abigail",  last: "Harris",   type: "buyer",  status: "active" },
-      { email: "liam.nguyen@demo.com",    first: "Liam",     last: "Nguyen",   type: "buyer",  status: "active" },
-      { email: "mia.garcia@demo.com",     first: "Mia",      last: "Garcia",   type: "buyer",  status: "active" },
-      { email: "noah.thompson@demo.com",  first: "Noah",     last: "Thompson", type: "seller", status: "active" },
-      { email: "isabella.white@demo.com", first: "Isabella", last: "White",    type: "seller", status: "active" },
-      { email: "oliver.hall@demo.com",    first: "Oliver",   last: "Hall",     type: "seller", status: "active" },
-      { email: "emma.martin@demo.com",    first: "Emma",     last: "Martin",   type: "seller", status: "active" },
-      { email: "aiden.wilson@demo.com",   first: "Aiden",    last: "Wilson",   type: "seller", status: "active" },
-      { email: "harper.jackson@demo.com", first: "Harper",   last: "Jackson",  type: "seller", status: "active" },
-      { email: "elijah.lee@demo.com",     first: "Elijah",   last: "Lee",      type: "seller", status: "active" },
-      { email: "amelia.taylor@demo.com",  first: "Amelia",   last: "Taylor",   type: "seller", status: "active" },
-      { email: "lucas.anderson@demo.com", first: "Lucas",    last: "Anderson", type: "seller", status: "active" },
-      { email: "evelyn.lewis@demo.com",   first: "Evelyn",   last: "Lewis",    type: "seller", status: "active" },
+
+    // ── Name pools ──────────────────────────────────────────────────────────
+    // 10 × 10 = 100 unique buyer full names
+    const BUYER_FIRST  = ["Aaron","Brooke","Cameron","Diana","Ethan","Fiona","Gabriel","Hailey","Isaac","Jasmine"];
+    const BUYER_LAST   = ["Anderson","Baker","Carter","Davis","Evans","Foster","Garcia","Harris","Irving","Johnson"];
+    // 5 × 5 = 25 unique seller full names
+    const SELLER_FIRST = ["Kyle","Lauren","Marcus","Natalie","Oscar"];
+    const SELLER_LAST  = ["Phillips","Quinn","Roberts","Scott","Turner"];
+    // 10 fixed admin identities
+    const ADMIN_NAMES  = [
+      { first:"Alex",  last:"Morgan"   },{ first:"Beth",  last:"Hamilton" },
+      { first:"Carl",  last:"Stevens"  },{ first:"Diana", last:"Walsh"    },
+      { first:"Eric",  last:"Chambers" },{ first:"Faye",  last:"Thornton" },
+      { first:"Grant", last:"Wheeler"  },{ first:"Helen", last:"Burke"    },
+      { first:"Ian",   last:"Caldwell" },{ first:"Julia", last:"Reeves"   },
     ];
+
+    const pad  = (n: number, w: number) => String(n).padStart(w, "0");
+    const dAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+
+    interface Acct {
+      email: string; first: string; last: string;
+      type: string;  status: string;
+      activatedDaysAgo: number | null;
+      suspendedDaysAgo?: number;
+      closedDaysAgo?: number;
+      isAdmin?: boolean;
+    }
+
+    // ── 100 buyers: buyers 91-97 suspended, 98-100 closed, rest active ──────
+    const BUYERS: Acct[] = Array.from({ length: 100 }, (_, i) => {
+      const n = i + 1;
+      const fi = Math.floor(i / 10), li = i % 10;
+      let status = "active", aDays: number | null = ((n * 7) % 365) + 1;
+      let sDays: number | undefined, cDays: number | undefined;
+      if (n >= 91 && n <= 97) { status="suspended"; aDays=90+(n%7)*10; sDays=(n%30)+1; }
+      else if (n >= 98)        { status="closed";    aDays=180+n;       cDays=(n%20)+5; }
+      return { email:`buyer${pad(n,3)}@sportvault.com`,
+               first:BUYER_FIRST[fi], last:BUYER_LAST[li],
+               type:"buyer", status, activatedDaysAgo:aDays,
+               suspendedDaysAgo:sDays, closedDaysAgo:cDays };
+    });
+
+    // ── 25 sellers: sellers 21-23 suspended, 24-25 closed, rest active ──────
+    const SELLERS: Acct[] = Array.from({ length: 25 }, (_, i) => {
+      const n = i + 1;
+      const fi = Math.floor(i / 5), li = i % 5;
+      let status = "active", aDays: number | null = ((n * 11) % 300) + 14;
+      let sDays: number | undefined, cDays: number | undefined;
+      if (n >= 21 && n <= 23) { status="suspended"; aDays=120+n*5; sDays=(n%15)+3; }
+      else if (n >= 24)        { status="closed";    aDays=200+n*3; cDays=(n%10)+7; }
+      return { email:`seller${pad(n,3)}@sportvault.com`,
+               first:SELLER_FIRST[fi], last:SELLER_LAST[li],
+               type:"seller", status, activatedDaysAgo:aDays,
+               suspendedDaysAgo:sDays, closedDaysAgo:cDays };
+    });
+
+    // ── 10 admins: all active ────────────────────────────────────────────────
+    const ADMINS: Acct[] = ADMIN_NAMES.map((nm, i) => ({
+      email:`admin${pad(i+1,3)}@sportvault.com`, first:nm.first, last:nm.last,
+      type:"admin", status:"active", activatedDaysAgo:(i+1)*15, isAdmin:true,
+    }));
+
+    const ALL: Acct[] = [...BUYERS, ...SELLERS, ...ADMINS];
+
     try {
-      const hash = await bcrypt.hash(SEED_PASSWORD, BCRYPT_ROUNDS);
-      let inserted = 0;
-      let skipped  = 0;
-      for (const u of USERS) {
-        const exists = await pool.query("SELECT id FROM account WHERE user_id = $1", [u.email]);
+      const adminSeedPassword = process.env.ADMIN_SEED_PASSWORD || "Admin1234!";
+      const buyerHash = await bcrypt.hash(SEED_PASSWORD,       BCRYPT_ROUNDS);
+      const adminHash = await bcrypt.hash(adminSeedPassword,   BCRYPT_ROUNDS);
+
+      let inserted = 0, skipped = 0;
+
+      for (const u of ALL) {
+        const exists = await pool.query(
+          "SELECT id FROM account WHERE user_id = $1", [u.email]
+        );
         if (exists.rowCount && exists.rowCount > 0) { skipped++; continue; }
-        const typeRow   = await pool.query("SELECT id FROM account_type   WHERE name = $1", [u.type]);
-        const statusRow = await pool.query("SELECT id FROM account_status WHERE name = $1", [u.status]);
+
+        const typeRow   = await pool.query(
+          "SELECT id FROM account_type   WHERE name = $1", [u.type]
+        );
+        const statusRow = await pool.query(
+          "SELECT id FROM account_status WHERE name = $1", [u.status]
+        );
         if (!typeRow.rowCount || !statusRow.rowCount) { skipped++; continue; }
+
+        const hash  = u.isAdmin ? adminHash : buyerHash;
+        const aDate = u.activatedDaysAgo  != null ? dAgo(u.activatedDaysAgo)  : null;
+        const sDate = u.suspendedDaysAgo  != null ? dAgo(u.suspendedDaysAgo)  : null;
+        const cDate = u.closedDaysAgo     != null ? dAgo(u.closedDaysAgo)     : null;
+
         const r = await pool.query(
-          `INSERT INTO account (user_id, password_hash, first_name, last_name, type_id, status_id, activated_date)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id`,
-          [u.email, hash, u.first, u.last, typeRow.rows[0].id, statusRow.rows[0].id]
+          `INSERT INTO account
+             (user_id, password_hash, first_name, last_name,
+              type_id, status_id, activated_date, suspended_date, closed_date)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           RETURNING id`,
+          [u.email, hash, u.first, u.last,
+           typeRow.rows[0].id, statusRow.rows[0].id,
+           aDate, sDate, cDate]
         );
         await pool.query(
-          `INSERT INTO account_audit_log (actor_id, target_id, action, detail) VALUES ($1, $2, $3, $4)`,
-          [r.rows[0].id, r.rows[0].id, "ACCOUNT_SEEDED", `Seeded: ${u.email}`]
+          `INSERT INTO account_audit_log (actor_id, target_id, action, detail)
+           VALUES ($1,$2,$3,$4)`,
+          [r.rows[0].id, r.rows[0].id, "ACCOUNT_SEEDED",
+           `Seeded ${u.type}: ${u.email}`]
         );
         inserted++;
       }
-      const buyers = (await pool.query(
-        `SELECT a.id FROM account a JOIN account_type t ON t.id = a.type_id WHERE t.name = 'buyer'`
+
+      // Return all IDs grouped by type for downstream seed steps
+      const buyers  = (await pool.query(
+        `SELECT a.id FROM account a
+         JOIN account_type t ON t.id = a.type_id WHERE t.name = 'buyer'`
       )).rows.map((r: any) => r.id as string);
 
       const sellers = (await pool.query(
-        `SELECT a.id FROM account a JOIN account_type t ON t.id = a.type_id WHERE t.name = 'seller'`
+        `SELECT a.id FROM account a
+         JOIN account_type t ON t.id = a.type_id WHERE t.name = 'seller'`
       )).rows.map((r: any) => r.id as string);
 
-      logger.info(`[Seed] AccountService: inserted=${inserted}, skipped=${skipped}`);
-      res.json({ service: "AccountService", inserted, skipped, buyer_ids: buyers, seller_ids: sellers });
+      const admins  = (await pool.query(
+        `SELECT a.id FROM account a
+         JOIN account_type t ON t.id = a.type_id WHERE t.name = 'admin'`
+      )).rows.map((r: any) => r.id as string);
+
+      logger.info(
+        `[Seed] AccountService: inserted=${inserted}, skipped=${skipped}, ` +
+        `buyers=${buyers.length}, sellers=${sellers.length}, admins=${admins.length}`
+      );
+      res.json({
+        service: "AccountService",
+        inserted, skipped,
+        buyer_ids: buyers, seller_ids: sellers, admin_ids: admins,
+      });
     } catch (err) {
       logger.error("Seed error", err);
       res.status(500).json({ error: "Seed failed", detail: String(err) });

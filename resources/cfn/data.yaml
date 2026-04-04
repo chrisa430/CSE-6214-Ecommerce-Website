@@ -1,6 +1,5 @@
-# cfn/data.yaml
 AWSTemplateFormatVersion: '2010-09-09'
-Description: SportVault — Data Infrastructure (RDS + MSK + Secrets)
+Description: SportVault Data Infrastructure (RDS + MSK + Secrets)
 
 Parameters:
   DBMasterPassword:
@@ -32,6 +31,8 @@ Resources:
   # ── RDS PostgreSQL Instance ──────────────────────────────────────────
   RDSInstance:
     Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
     Properties:
       DBInstanceIdentifier: sportvault-db
       DBInstanceClass: db.t3.medium
@@ -44,7 +45,6 @@ Resources:
       DBSubnetGroupName: !Ref DBSubnetGroup
       VPCSecurityGroups: [!ImportValue sportvault-RDSSecurityGroup]
       PubliclyAccessible: false
-      DeletionPolicy: Snapshot
 
   # ── Secrets Manager — JWT secrets ────────────────────────────────────
   JWTSecret:
@@ -92,6 +92,17 @@ Resources:
         SecurityGroups: [!ImportValue sportvault-MSKSecurityGroup]
 
 Outputs:
-  RDSEndpoint:   {Value: !GetAtt RDSInstance.Endpoint.Address, Export: {Name: sportvault-RDSEndpoint}}
-  MSKBrokers:    {Value: !GetAtt MSKCluster.BootstrapBrokers,  Export: {Name: sportvault-MSKBrokers}}
-  JWTSecretArn:  {Value: !Ref JWTSecret, Export: {Name: sportvault-JWTSecretArn}}
+  RDSEndpoint:
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: sportvault-RDSEndpoint
+
+  MSKClusterArn:
+    Value: !Ref MSKCluster
+    Export:
+      Name: sportvault-MSKClusterArn
+
+  JWTSecretArn:
+    Value: !Ref JWTSecret
+    Export:
+      Name: sportvault-JWTSecretArn
