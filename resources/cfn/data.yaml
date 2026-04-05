@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SportVault Data Infrastructure (RDS + MSK + Secrets)
+
+Parameters:
+  DBMasterPassword:
+    Type: String
+    NoEcho: true
+    Description: Master password for the RDS instance
+  SeedPassword:
+    Type: String
+    NoEcho: true
+    Description: Password used for seeded dummy accounts (SEED_PASSWORD)
+  JwtAccessSecret:
+    Type: String
+    NoEcho: true
+  JwtRefreshSecret:
+    Type: String
+    NoEcho: true
+
+Resources:
+
+  # ── RDS Subnet Group ────────────────────────────────────────────────
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: SportVault RDS subnets
+      SubnetIds:
+        - !ImportValue sportvault-PrivateSubnet1
+        - !ImportValue sportvault-PrivateSubnet2
+
+  # ── RDS PostgreSQL Instance ──────────────────────────────────────────
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: sportvault-db
+      DBInstanceClass: db.t3.medium
+      Engine: postgres
+      EngineVersion: '16'
+      MasterUsername: sportvault_admin
+      MasterUserPassword: !Ref DBMasterPassword
+      AllocatedStorage: '20'
+      StorageType: gp3
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups: [!ImportValue sportvault-RDSSecurityGroup]
+      PubliclyAccessible: false
+
+  # ── Secrets Manager — JWT secrets ────────────────────────────────────
+  JWTSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: sportvault/jwt
+      SecretString: !Sub |
+        {
+          "JWT_ACCESS_SECRET":  "${JwtAccessSecret}",
+          "JWT_REFRESH_SECRET": "${JwtRefreshSecret}"
+        }
+
+  # ── Secrets Manager — per-service DB credentials ─────────────────────
+  AccountDBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: sportvault/db/account
+      SecretString: !Sub |
+        {
+          "DB_HOST":         "${RDSInstance.Endpoint.Address}",
+          "DB_USER":         "account_user",
+          "DB_PASS":         "account_pass",
+          "SEED_PASSWORD":   "${SeedPassword}"
+        }
+
+  # ... repeat for sportvault/db/authn, /db/admin, /db/cart,
+  #     /db/order, /db/seller, /db/inventory
+  # Order service secret includes all cross-DB connection strings:
+  # CART_DB_HOST, INVENTORY_DB_HOST, ADMIN_DB_HOST, ACCOUNT_DB_HOST
+
+  # ── MSK Kafka Cluster ────────────────────────────────────────────────
+  MSKCluster:
+    Type: AWS::MSK::Cluster
+    Properties:
+      ClusterName: sportvault-kafka
+      KafkaVersion: '3.5.1'
+      NumberOfBrokerNodes: 2
+      BrokerNodeGroupInfo:
+        InstanceType: kafka.t3.small
+        StorageInfo:
+          EBSStorageInfo: {VolumeSize: 20}
+        ClientSubnets:
+          - !ImportValue sportvault-PrivateSubnet1
+          - !ImportValue sportvault-PrivateSubnet2
+        SecurityGroups: [!ImportValue sportvault-MSKSecurityGroup]
+
+Outputs:
+  RDSEndpoint:
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: sportvault-RDSEndpoint
+
+  MSKClusterArn:
+    Value: !Ref MSKCluster
+    Export:
+      Name: sportvault-MSKClusterArn
+
+  JWTSecretArn:
+    Value: !Ref JWTSecret
+    Export:
+      Name: sportvault-JWTSecretArn

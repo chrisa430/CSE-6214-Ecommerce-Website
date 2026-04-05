@@ -33,8 +33,6 @@ services:
       - sportvault-net
 
   # ── Kafka Topic Provisioner ────────────────────────────────────────────────
-  # Runs once at startup to pre-create all topics with defined partition counts.
-  # Prevents auto-create from producing single-partition topics with no replication.
   kafka-init:
     image: confluentinc/cp-kafka:7.6.1
     container_name: kafka-init
@@ -182,6 +180,10 @@ services:
       DB_NAME: authn_authz
       DB_USER: authn_user
       DB_PASS: authn_pass
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: authn-authz-service
       INTERNAL_SECRET: internal-secret
@@ -214,12 +216,12 @@ services:
       INTERNAL_SECRET: internal-secret
       APP_BASE_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
-      # Seed credentials — sourced from .env at the project root (never hardcoded)
       SEED_PASSWORD: ${SEED_PASSWORD}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-Admin1234!}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sportvault.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
-      ADMIN_FIRST: ${ADMIN_FIRST}
-      ADMIN_LAST: ${ADMIN_LAST}
+      ADMIN_FIRST: ${ADMIN_FIRST:-Sport}
+      ADMIN_LAST: ${ADMIN_LAST:-Vault}
     ports:
       - "3002:3002"
     depends_on:
@@ -252,6 +254,12 @@ services:
       INVENTORY_DB_NAME: inventory
       INVENTORY_DB_USER: inventory_user
       INVENTORY_DB_PASS: inventory_pass
+      ORDER_DB_HOST: postgres-order
+      ORDER_DB_PORT: 5432
+      ORDER_DB_NAME: order
+      ORDER_DB_USER: order_user
+      ORDER_DB_PASS: order_pass
+      ORDER_AGE: 60
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: admin-service
       INTERNAL_SECRET: internal-secret
@@ -264,6 +272,7 @@ services:
       - postgres-admin
       - postgres-account
       - postgres-inventory
+      - postgres-order
       - kafka
     networks:
       - sportvault-net
@@ -282,6 +291,7 @@ services:
       DB_NAME: shopping_cart
       DB_USER: shopping_cart_user
       DB_PASS: shopping_cart_pass
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: shopping-cart-service
       INTERNAL_SECRET: internal-secret
@@ -308,10 +318,12 @@ services:
       DB_NAME: order
       DB_USER: order_user
       DB_PASS: order_pass
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: order-service
       INTERNAL_SECRET: internal-secret
       CORS_ORIGIN: http://localhost:5173
+      ORDER_AGE: 60
       CART_DB_HOST: postgres-shopping-cart
       CART_DB_PORT: 5432
       CART_DB_NAME: shopping_cart
@@ -322,12 +334,25 @@ services:
       INVENTORY_DB_NAME: inventory
       INVENTORY_DB_USER: inventory_user
       INVENTORY_DB_PASS: inventory_pass
+      ADMIN_DB_HOST: postgres-admin
+      ADMIN_DB_PORT: 5432
+      ADMIN_DB_NAME: admin
+      ADMIN_DB_USER: admin_user
+      ADMIN_DB_PASS: admin_pass
+      ACCOUNT_DB_HOST: postgres-account
+      ACCOUNT_DB_PORT: 5432
+      ACCOUNT_DB_NAME: account
+      ACCOUNT_DB_USER: account_user
+      ACCOUNT_DB_PASS: account_pass
+      APP_BASE_URL: http://localhost:5173
     ports:
       - "3005:3005"
     depends_on:
       - postgres-order
       - postgres-shopping-cart
       - postgres-inventory
+      - postgres-admin
+      - postgres-account
       - kafka
     networks:
       - sportvault-net
@@ -372,6 +397,7 @@ services:
       DB_NAME: inventory
       DB_USER: inventory_user
       DB_PASS: inventory_pass
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: inventory-service
       INTERNAL_SECRET: internal-secret

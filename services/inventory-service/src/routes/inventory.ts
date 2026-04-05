@@ -374,6 +374,8 @@ router.delete(
 );
 
 // ── POST /inventory/internal/seed ────────────────────────────────────────────
+// Seeds 1,000 products (40 per seller across 25 sellers) with valid Picsum
+// image URLs. Returns product_ids so the order seed can reference real products.
 router.post(
   "/internal/seed",
   requireInternalSecret as any,
@@ -381,6 +383,7 @@ router.post(
     const pool = getPool();
     const sellerIds: string[] = (req.body as any).sellerIds ?? [];
     const PLACEHOLDER = "00000000-0000-0000-0000-000000000001";
+    // With 25 sellers × 40 products each = 1,000 products total (exact round-robin)
     const getSeller = (n: number): string =>
       sellerIds.length > 0 ? sellerIds[(n - 1) % sellerIds.length] : PLACEHOLDER;
 
@@ -398,11 +401,16 @@ router.post(
       const statusMap: Record<string, string> = {};
       for (const s of statRows) statusMap[s.code] = s.id;
 
+      // ── Seed subcategories ─────────────────────────────────────────────────
       let subcatsInserted = 0;
       for (const cat of catRows) {
         for (const sub of [
-          { code: `${cat.code}_signed`,    name: `${cat.code}_signed`,    short: "Signed Item",    long: `Signed ${cat.name} memorabilia` },
-          { code: `${cat.code}_game_used`, name: `${cat.code}_game_used`, short: "Game-Used Item", long: `Game-used ${cat.name} memorabilia` },
+          { code: `${cat.code}_signed`,    name: `${cat.code}_signed`,
+            short: "Signed Item",    long: `Signed ${cat.name} memorabilia` },
+          { code: `${cat.code}_game_used`, name: `${cat.code}_game_used`,
+            short: "Game-Used Item", long: `Game-used ${cat.name} memorabilia` },
+          { code: `${cat.code}_vintage`,   name: `${cat.code}_vintage`,
+            short: "Vintage Item",   long: `Vintage ${cat.name} memorabilia (pre-1990)` },
         ]) {
           await pool.query(
             `INSERT INTO product_subcategory (category_id, code, name, short_desc, long_desc)
@@ -413,90 +421,195 @@ router.post(
         }
       }
 
-      const subcatRows = ((await pool.query("SELECT id, category_id, code FROM product_subcategory ORDER BY code")).rows) as { id: string; category_id: string; code: string }[];
+      const subcatRows = (
+        (await pool.query("SELECT id, category_id, code FROM product_subcategory ORDER BY code")).rows
+      ) as { id: string; category_id: string; code: string }[];
 
+      // ── 40 product templates — cycle through all for variety ───────────────
       const ITEMS = [
-        { type: "Signed Baseball",    team: "New York Yankees",    player: "Derek Jeter",     signed: true,  inscribed: false, inscription: "" },
-        { type: "Signed Jersey",      team: "Dallas Cowboys",      player: "Emmitt Smith",    signed: true,  inscribed: false, inscription: "" },
-        { type: "Game-Used Bat",      team: "Los Angeles Dodgers", player: "Mookie Betts",    signed: false, inscribed: false, inscription: "" },
-        { type: "Signed Mini Helmet", team: "Kansas City Chiefs",  player: "Patrick Mahomes", signed: true,  inscribed: true,  inscription: "Super Bowl Champions" },
-        { type: "Signed Golf Ball",   team: "PGA Tour",            player: "Tiger Woods",     signed: true,  inscribed: false, inscription: "" },
-        { type: "Signed Card",        team: "Chicago Bulls",       player: "Michael Jordan",  signed: true,  inscribed: false, inscription: "" },
-        { type: "Signed Racket",      team: "ATP Tour",            player: "Serena Williams", signed: true,  inscribed: true,  inscription: "23 Grand Slams" },
-        { type: "Game-Used Jersey",   team: "Boston Red Sox",      player: "David Ortiz",     signed: false, inscribed: false, inscription: "" },
-        { type: "Signed Lithograph",  team: "San Francisco 49ers", player: "Joe Montana",     signed: true,  inscribed: true,  inscription: "Super Bowl XIX" },
-        { type: "Championship Belt",  team: "WWE",                 player: "The Rock",        signed: true,  inscribed: false, inscription: "" },
+        // MLB
+        { type:"Signed Baseball",      team:"New York Yankees",       player:"Aaron Judge",        signed:true,  inscribed:false, inscription:"" },
+        { type:"Game-Used Bat",         team:"Los Angeles Dodgers",    player:"Mookie Betts",       signed:false, inscribed:false, inscription:"" },
+        { type:"Signed Jersey",         team:"Houston Astros",         player:"Jose Altuve",        signed:true,  inscribed:true,  inscription:"2017 WS Champs" },
+        { type:"Signed Baseball Card",  team:"Atlanta Braves",         player:"Ronald Acuna Jr",    signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Lithograph",     team:"San Francisco Giants",   player:"Buster Posey",       signed:true,  inscribed:true,  inscription:"3x WS Champion" },
+        { type:"Game-Used Cleats",      team:"Boston Red Sox",         player:"Rafael Devers",      signed:false, inscribed:false, inscription:"" },
+        { type:"Signed Baseball",       team:"Chicago Cubs",           player:"Dansby Swanson",     signed:true,  inscribed:false, inscription:"" },
+        { type:"Vintage Signed Ball",   team:"New York Yankees",       player:"Derek Jeter",        signed:true,  inscribed:true,  inscription:"Mr. November" },
+        // Football
+        { type:"Signed Mini Helmet",    team:"Kansas City Chiefs",     player:"Patrick Mahomes",    signed:true,  inscribed:true,  inscription:"Super Bowl MVP" },
+        { type:"Signed Jersey",         team:"Dallas Cowboys",         player:"CeeDee Lamb",        signed:true,  inscribed:false, inscription:"" },
+        { type:"Game-Used Gloves",      team:"Philadelphia Eagles",    player:"Jalen Hurts",        signed:false, inscribed:false, inscription:"" },
+        { type:"Signed Football",       team:"San Francisco 49ers",    player:"Brock Purdy",        signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Helmet",         team:"Buffalo Bills",          player:"Josh Allen",         signed:true,  inscribed:false, inscription:"" },
+        { type:"Game-Used Jersey",      team:"Miami Dolphins",         player:"Tyreek Hill",        signed:false, inscribed:false, inscription:"" },
+        { type:"Signed Photo",          team:"New England Patriots",   player:"Tom Brady",          signed:true,  inscribed:true,  inscription:"7x Super Bowl Champion" },
+        { type:"Signed Jersey",         team:"St. Louis Cardinals",    player:"Albert Pujols",      signed:true,  inscribed:true,  inscription:"3x NL MVP" },
+        // Golf
+        { type:"Signed Golf Ball",      team:"PGA Tour",               player:"Tiger Woods",        signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Golf Club",      team:"PGA Tour",               player:"Rory McIlroy",       signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Flag Pin",       team:"The Masters",            player:"Jon Rahm",           signed:true,  inscribed:true,  inscription:"2023 Masters Champion" },
+        { type:"Signed Glove",          team:"LPGA Tour",              player:"Nelly Korda",        signed:true,  inscribed:false, inscription:"" },
+        // Soccer
+        { type:"Signed Soccer Ball",    team:"Inter Miami CF",         player:"Lionel Messi",       signed:true,  inscribed:true,  inscription:"GOAT" },
+        { type:"Signed Jersey",         team:"LA Galaxy",              player:"Riqui Puig",         signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Jersey",         team:"Portland Thorns",        player:"Crystal Dunn",       signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Jersey",         team:"NJ/NY Gotham FC",        player:"Lynn Williams",      signed:true,  inscribed:false, inscription:"" },
+        // Tennis
+        { type:"Signed Tennis Racket",  team:"ATP Tour",               player:"Carlos Alcaraz",     signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Tennis Ball",    team:"Wimbledon",              player:"Novak Djokovic",     signed:true,  inscribed:true,  inscription:"24 Grand Slams" },
+        { type:"Signed Racket",         team:"WTA Tour",               player:"Iga Swiatek",        signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Tennis Ball",    team:"US Open",                player:"Coco Gauff",         signed:true,  inscribed:true,  inscription:"US Open Champion" },
+        { type:"Signed Tennis Racket",  team:"ATP Tour",               player:"Jannik Sinner",      signed:true,  inscribed:true,  inscription:"Australian Open 2024" },
+        // Wrestling
+        { type:"Championship Belt",     team:"WWE",                    player:"Cody Rhodes",        signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Photo",          team:"WWE",                    player:"Roman Reigns",       signed:true,  inscribed:true,  inscription:"Acknowledge Me" },
+        { type:"Signed Photo",          team:"WWE Women's",            player:"Rhea Ripley",        signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Action Figure",  team:"WWE",                    player:"Seth Rollins",       signed:true,  inscribed:false, inscription:"" },
+        // Softball / Minor League
+        { type:"Signed Softball",       team:"AUSL",                   player:"Cat Osterman",       signed:true,  inscribed:false, inscription:"" },
+        { type:"Signed Baseball",       team:"Durham Bulls",           player:"Josh Lowe",          signed:true,  inscribed:false, inscription:"" },
+        { type:"Game-Used Jersey",      team:"Hartford Yard Goats",    player:"Adael Amador",       signed:false, inscribed:false, inscription:"" },
+        { type:"Signed Baseball",       team:"Lansing Lugnuts",        player:"Dasan Brown",        signed:true,  inscribed:false, inscription:"" },
+        { type:"Game-Used Bat",         team:"Palm Beach Cardinals",   player:"Jordan Walker",      signed:false, inscribed:false, inscription:"" },
+        { type:"Signed Baseball",       team:"FCL Rays",               player:"Chandler Champlain", signed:true,  inscribed:false, inscription:"" },
+        // Additional vintage
+        { type:"Signed Card",           team:"Chicago Bulls",          player:"Michael Jordan",     signed:true,  inscribed:false, inscription:"" },
       ];
-      const STAT_CYCLE = ["active","active","active","active","active","active","active","suspended","active","open"];
+
+      // 85% active, 10% suspended, 5% open — matches realistic inventory distribution
+      const STAT_CYCLE = [
+        "active","active","active","active","active","active","active","active","active","active",
+        "active","active","active","active","active","active","active","suspended","active","open",
+      ];
+
       let productsInserted = 0;
       const productIds: string[] = [];
 
-      for (let n = 1; n <= 50; n++) {
-        const item = ITEMS[(n-1)%ITEMS.length], cat = catRows[(n-1)%catRows.length];
-        const cond = condRows[(n-1)%condRows.length], prot = protRows[(n-1)%protRows.length];
-        const statusId = statusMap[STAT_CYCLE[(n-1)%STAT_CYCLE.length]] ?? statRows[0].id;
-        const sub = subcatRows.find(s => s.category_id === cat.id) ?? null;
+      // ── Insert 1,000 products — 40 per seller (25 sellers × 40 = 1,000) ───
+      for (let n = 1; n <= 1000; n++) {
+        const item     = ITEMS[(n - 1) % ITEMS.length];
+        const cat      = catRows[(n - 1) % catRows.length];
+        const cond     = condRows[(n - 1) % condRows.length];
+        const prot     = protRows[(n - 1) % protRows.length];
+        const statusId = statusMap[STAT_CYCLE[(n - 1) % STAT_CYCLE.length]] ?? statRows[0].id;
+        const sub      = subcatRows.find(s => s.category_id === cat.id) ?? null;
+
+        // Price varies from $49.99 to $1,299.99 in a deterministic pattern
+        const price = parseFloat((49.99 + ((n * 12.5) % 1250)).toFixed(2));
+
         const r = await pool.query(
-          `INSERT INTO product (seller_id,name,short_desc,long_desc,category_id,subcategory_id,
-             team_name,player_name,gender,is_signed,is_authenticated,is_framed,
-             has_inscription,inscription_text,has_multi_sigs,is_protected,protection_type_id,
-             condition_id,status_id,quantity,unit_price)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-           RETURNING id`,
-          [getSeller(n), `${item.player} - ${item.type} #${n}`,
-           `${item.type} - ${cat.name}`,
-           `Authentic sports memorabilia - ${item.type} by ${item.player}.`,
-           cat.id, sub?.id??null, item.team, item.player, cat.gender??"unspecified",
-           item.signed, item.signed, (n%4===0), item.inscribed,
-           item.inscribed?item.inscription:null, (n%5===0), (n%3!==2),
-           prot.id, cond.id, statusId, (n%5)+1,
-           parseFloat(((n * 17.5) + 29.99).toFixed(2))]
+          `INSERT INTO product (
+             seller_id, name, short_desc, long_desc,
+             category_id, subcategory_id, team_name, player_name, gender,
+             is_signed, is_authenticated, is_framed,
+             has_inscription, inscription_text, has_multi_sigs,
+             is_protected, protection_type_id, condition_id,
+             status_id, quantity, unit_price
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+           ) RETURNING id`,
+          [
+            getSeller(n),
+            `${item.player} - ${item.type} #${n}`,
+            `${item.type} — ${cat.name}`,
+            `Authentic sports memorabilia: ${item.type} by ${item.player} (${item.team}).`,
+            cat.id, sub?.id ?? null,
+            item.team, item.player, cat.gender ?? "unspecified",
+            item.signed, item.signed,
+            (n % 8 === 0),
+            item.inscribed, item.inscribed ? item.inscription : null,
+            (n % 10 === 0),
+            (n % 4 !== 2),
+            prot.id, cond.id, statusId,
+            (n % 5) + 1,
+            price,
+          ]
         );
-        productIds.push(r.rows[0].id); productsInserted++;
+        productIds.push(r.rows[0].id);
+        productsInserted++;
       }
 
+      // ── Insert product images using Picsum Photos (valid public CDN) ───────
+      // Primary  : https://picsum.photos/seed/sv{n}a/800/600
+      // Detail   : https://picsum.photos/seed/sv{n}b/800/600
+      // Auth cert: https://picsum.photos/seed/sv{n}c/400/300  (signed items only)
       let imagesInserted = 0;
       for (let i = 0; i < productIds.length; i++) {
-        const pid = productIds[i], n = i+1, base = `https://cdn.sportvault.com/products/${pid}`;
-        const imgs = [
-          { name:"Front View",  slug:"front",  sort:1, primary:true  },
-          { name:"Detail View", slug:"detail", sort:2, primary:false },
+        const pid  = productIds[i];
+        const n    = i + 1;
+        const item = ITEMS[(n - 1) % ITEMS.length];
+
+        const imgs: { name: string; url: string; sort: number; primary: boolean }[] = [
+          {
+            name: "Front View",
+            url:  `https://picsum.photos/seed/sv${n}a/800/600`,
+            sort: 1, primary: true,
+          },
+          {
+            name: "Detail View",
+            url:  `https://picsum.photos/seed/sv${n}b/800/600`,
+            sort: 2, primary: false,
+          },
         ];
-        if ((n-1)%10 < 7 && ITEMS[(n-1)%ITEMS.length].signed)
-          imgs.push({ name:"Authentication", slug:"auth", sort:3, primary:false });
+
+        // Add authentication certificate image for signed items
+        if (item.signed && n % 5 !== 0) {
+          imgs.push({
+            name: "Authentication Certificate",
+            url:  `https://picsum.photos/seed/sv${n}c/400/300`,
+            sort: 3, primary: false,
+          });
+        }
+
         for (const img of imgs) {
           await pool.query(
             `INSERT INTO product_image
-               (product_id,name,short_desc,long_desc,image_url,sort_order,is_primary)
+               (product_id, name, short_desc, long_desc, image_url, sort_order, is_primary)
              VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [pid, `${img.name} - Product ${n}`, img.name,
-             `${img.name} image for product ${n}`, `${base}/${img.slug}.jpg`,
-             img.sort, img.primary]
+            [
+              pid,
+              `${img.name} — Product #${n}`,
+              img.name,
+              `${img.name} for ${ITEMS[(n-1)%ITEMS.length].player} — ${ITEMS[(n-1)%ITEMS.length].type} #${n}`,
+              img.url,
+              img.sort,
+              img.primary,
+            ]
           );
           imagesInserted++;
         }
       }
 
+      // ── Aggregate totals ───────────────────────────────────────────────────
       const q = async (s: string) => parseInt((await pool.query(s)).rows[0].count);
       const totals = {
-        product_status_types: await q("SELECT COUNT(*) FROM product_status_type"),
-        product_categories:   await q("SELECT COUNT(*) FROM product_category"),
-        product_subcategories:await q("SELECT COUNT(*) FROM product_subcategory"),
-        protection_types:     await q("SELECT COUNT(*) FROM protection_type"),
-        condition_types:      await q("SELECT COUNT(*) FROM condition_type"),
+        product_status_types:  await q("SELECT COUNT(*) FROM product_status_type"),
+        product_categories:    await q("SELECT COUNT(*) FROM product_category"),
+        product_subcategories: await q("SELECT COUNT(*) FROM product_subcategory"),
+        protection_types:      await q("SELECT COUNT(*) FROM protection_type"),
+        condition_types:       await q("SELECT COUNT(*) FROM condition_type"),
         product_category_types:await q("SELECT COUNT(*) FROM product_category_type"),
-        products:             await q("SELECT COUNT(*) FROM product"),
-        product_images:       await q("SELECT COUNT(*) FROM product_image"),
+        products:              await q("SELECT COUNT(*) FROM product"),
+        product_images:        await q("SELECT COUNT(*) FROM product_image"),
       };
+
       logger.info(`[Seed] InventoryService: ${JSON.stringify(totals)}`);
       await publishEvent(TOPICS.INVENTORY_EVENTS, "seed", {
-        eventType: "PRODUCTS_SEEDED", usingPlaceholderSeller: sellerIds.length===0,
+        eventType: "PRODUCTS_SEEDED",
+        usingPlaceholderSeller: sellerIds.length === 0,
         totals, occurredAt: new Date().toISOString(),
       });
+
       res.json({
         service: "InventoryService",
-        using_placeholder_seller: sellerIds.length===0,
-        inserted: { subcategories: subcatsInserted, products: productsInserted, images: imagesInserted },
+        using_placeholder_seller: sellerIds.length === 0,
+        product_ids: productIds,          // returned for order seed step
+        inserted: {
+          subcategories: subcatsInserted,
+          products: productsInserted,
+          images: imagesInserted,
+        },
         totals,
       });
     } catch (err) {

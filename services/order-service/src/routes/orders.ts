@@ -103,49 +103,144 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     } catch (err) { logger.error("Get order error", err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// POST /orders/internal/seed — verify order DB and insert sample orders
-// Body: { buyerIds?: string[] } — buyer UUIDs from the account seed step
+// POST /orders/internal/seed — seed 500 completed (delivered) orders
+// Body: { buyerIds?: string[], productIds?: string[] }
+//   buyerIds   — 100 buyer UUIDs from the account seed step (5 orders each = 500 total)
+//   productIds — product UUIDs from the inventory seed step (used for order items)
 router.post("/internal/seed", requireInternalSecret as any, async (req: Request, res: Response): Promise<void> => {
     const pool = getPool();
     try {
-        const statuses   = (await pool.query("SELECT COUNT(*) FROM order_status")).rows[0].count;
-        const currencies = (await pool.query("SELECT COUNT(*) FROM currency_type")).rows[0].count;
+        const statusCount    = (await pool.query("SELECT COUNT(*) FROM order_status")).rows[0].count;
+        const currencyCount  = (await pool.query("SELECT COUNT(*) FROM currency_type")).rows[0].count;
 
-        const buyerIds: string[] = (req.body as any).buyerIds ?? [];
-        const usdRow     = (await pool.query("SELECT id FROM currency_type WHERE name = 'USD'")).rows[0];
-        const pendingRow = (await pool.query("SELECT id FROM order_status   WHERE name = 'pending'")).rows[0];
+        const buyerIds:   string[] = (req.body as any).buyerIds   ?? [];
+        const productIds: string[] = (req.body as any).productIds ?? [];
 
-        // Use a placeholder UUID for shopping_cart_id — it is a cross-DB reference
-        // with no FK constraint, so any valid UUID is acceptable for seed data.
-        const PLACEHOLDER_CART_ID = "00000000-0000-0000-0000-000000000001";
+        const usdRow       = (await pool.query("SELECT id FROM currency_type WHERE name = 'USD'")).rows[0];
+        const deliveredRow = (await pool.query("SELECT id FROM order_status   WHERE name = 'delivered'")).rows[0];
+
+        // Cross-DB placeholder for shopping_cart_id (no FK constraint on this column)
+        const PLACEHOLDER_CART_ID = "00000000-0000-0000-0000-000000000002";
+
+        // Fallback product ID when no real products were passed in
+        const PLACEHOLDER_PRODUCT_ID = "00000000-0000-0000-0000-000000000003";
 
         let orders_inserted = 0;
-        if (usdRow && pendingRow && buyerIds.length > 0) {
-            for (let i = 0; i < Math.min(3, buyerIds.length); i++) {
-                const buyerId = buyerIds[i];
-                await pool.query(
-                    `INSERT INTO "order" (buyer_id, currency, shopping_cart_id, subtotal, tax, total, status_id)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [buyerId, usdRow.id, PLACEHOLDER_CART_ID,
-                        100.00 + i * 50, (100.00 + i * 50) * 0.07,
-                        (100.00 + i * 50) * 1.07, pendingRow.id]
-                );
-                orders_inserted++;
+
+        if (usdRow && deliveredRow && buyerIds.length > 0) {
+            // 5 orders per buyer = 100 buyers × 5 = 500 completed orders
+            const ORDERS_PER_BUYER = 5;
+
+            for (let b = 0; b < buyerIds.length; b++) {
+                const buyerId = buyerIds[b];
+
+                for (let o = 0; o < ORDERS_PER_BUYER; o++) {
+                    // Sequential order index for deterministic pricing / dates
+                    const orderIdx = b * ORDERS_PER_BUYER + o + 1;
+
+                    // ── Build 2 line items per order ───────────────────────
+                    const item1Price = parseFloat((49.99 + ((orderIdx * 13.7) % 450)).toFixed(2));
+                    const item2Price = parseFloat((29.99 + ((orderIdx * 8.3)  % 270)).toFixed(2));
+                    const qty1 = (orderIdx % 3) + 1;
+                    const qty2 = 1;
+                    const subtotal = parseFloat((item1Price * qty1 + item2Price * qty2).toFixed(2));
+                    const tax      = parseFloat((subtotal * 0.07).toFixed(2));
+                    const total    = parseFloat((subtotal + tax).toFixed(2));
+
+                    // ── Order created between 5 and 185 days ago ───────────
+                    const daysBack  = 5 + (orderIdx % 180);
+                    const createdAt = new Date();
+                    createdAt.setDate(createdAt.getDate() - daysBack);
+                    const updatedAt = new Date(createdAt.getTime() + 2 * 24 * 60 * 60 * 1000); // +2 days = delivered
+
+                    const orderResult = await pool.query(
+                        `INSERT INTO "order"
+                           (buyer_id, currency, shopping_cart_id,
+                            subtotal, tax, total, status_id,
+                            created_at, updated_at)
+                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                         RETURNING id`,
+                        [
+                            buyerId, usdRow.id, PLACEHOLDER_CART_ID,
+                            subtotal, tax, total, deliveredRow.id,
+                            createdAt, updatedAt,
+                        ]
+                    );
+                    const orderId = orderResult.rows[0].id as string;
+
+                    // ── Resolve product IDs — prefer real IDs if available ─
+                    const pid1 = productIds.length > 0
+                        ? productIds[(orderIdx * 2 - 2) % productIds.length]
+                        : PLACEHOLDER_PRODUCT_ID;
+                    const pid2 = productIds.length > 0
+                        ? productIds[(orderIdx * 2 - 1) % productIds.length]
+                        : PLACEHOLDER_PRODUCT_ID;
+
+                    // ── Insert completed order items ────────────────────────
+                    await pool.query(
+                        `INSERT INTO completed_order_items
+                           (order_id, product_id, quantity, unit_price, name, image_url)
+                         VALUES ($1,$2,$3,$4,$5,$6)`,
+                        [
+                            orderId, pid1, qty1, item1Price,
+                            `Signed Memorabilia Item #${orderIdx}-A`,
+                            `https://picsum.photos/seed/sv${(orderIdx*2-1)}a/400/300`,
+                        ]
+                    );
+                    await pool.query(
+                        `INSERT INTO completed_order_items
+                           (order_id, product_id, quantity, unit_price, name, image_url)
+                         VALUES ($1,$2,$3,$4,$5,$6)`,
+                        [
+                            orderId, pid2, qty2, item2Price,
+                            `Game-Used Collectible #${orderIdx}-B`,
+                            `https://picsum.photos/seed/sv${(orderIdx*2)}a/400/300`,
+                        ]
+                    );
+
+                    // ── Audit log ──────────────────────────────────────────
+                    await pool.query(
+                        `INSERT INTO order_audit_log
+                           (account_id, action, success, detail)
+                         VALUES ($1,$2,$3,$4)`,
+                        [
+                            buyerId, "ORDER_SEEDED", true,
+                            `Seeded delivered order ${orderIdx} for buyer ${b + 1}`,
+                        ]
+                    );
+
+                    orders_inserted++;
+                }
             }
         }
 
-        const orders_total = (await pool.query(`SELECT COUNT(*) FROM "order"`)).rows[0].count;
-        logger.info(`[Seed] order_status: ${statuses}, currency_type: ${currencies}, orders: ${orders_total}`);
+        const orders_total = parseInt(
+            (await pool.query(`SELECT COUNT(*) FROM "order"`)).rows[0].count
+        );
+        const items_total  = parseInt(
+            (await pool.query("SELECT COUNT(*) FROM completed_order_items")).rows[0].count
+        );
+
+        logger.info(
+            `[Seed] OrderService: orders=${orders_total}, items=${items_total}, ` +
+            `order_statuses=${statusCount}, currency_types=${currencyCount}`
+        );
         res.json({
-            service: "OrderService",
-            order_statuses: parseInt(statuses),
-            currency_types: parseInt(currencies),
+            service:         "OrderService",
+            order_statuses:  parseInt(statusCount),
+            currency_types:  parseInt(currencyCount),
             orders_inserted,
-            orders_total: parseInt(orders_total),
-            message: "Order DB verified",
+            orders_total,
+            items_total,
+            using_placeholder_products: productIds.length === 0,
+            message:         "500 delivered orders seeded (5 per buyer, 2 items each)",
         });
-    } catch (err) { logger.error("Seed error", err); res.status(500).json({ error: "Seed failed", detail: String(err) }); }
+    } catch (err) {
+        logger.error("Seed error", err);
+        res.status(500).json({ error: "Seed failed", detail: String(err) });
+    }
 });
+
 
 router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request, res: Response) => {
     const orderPool = getPool();

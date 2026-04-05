@@ -57,3 +57,14 @@ When you recreate the environment, you will have to insert an admin record into 
 ### Email Notifications
 In the current dev setup emails won't arrive in a real inbox. Instead the AdminService sends emails via Ethereal, a fake SMTP service used to test email functionality. The AdminService logs will have a link to the "email". Copy and
 paste it to a browser to see a preview.
+
+### Test Data Seeding
+The application database is seeded
+- account: 
+  - seeded with 100 Buyer accounts
+  - seeded with 25 Seller accounts
+  - seeded with 10 Admin accounts
+- inventory:
+  - seeded with 1000 Products
+- order
+  - seeded with 500 completed Orders

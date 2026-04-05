@@ -1,32 +1,34 @@
 /**
- * @fileoverview SportVault master seed script — calls all service seed APIs
+ * @fileoverview SportVault master seed script — orchestrates all service seed APIs
  * @module scripts/seed-all.ts
  * @author Darrell Hobson
- * @Date 2026.03.07
+ * @Date 2026.04.03
  *
  * Execution order:
- *   0. AccountService   — seed initial admin account (Darrell.Hobson@gmail.com)
- *   1. AccountService   — seed 20 dummy accounts (10 buyers, 10 sellers)
+ *   0. AccountService   — seed primary admin (from env: ADMIN_EMAIL / ADMIN_PASSWORD)
+ *   1. AccountService   — seed 135 dummy accounts:
+ *                           100 Buyers  (buyer001–buyer100 @sportvault.com)
+ *                            25 Sellers (seller001–seller025@sportvault.com)
+ *                            10 Admins  (admin001–admin010 @sportvault.com)
  *   2. AdminService     — verify admin reference data
- *   3. AuthnAuthzService — verify auth DB
+ *   3. AuthnAuthzService— verify auth DB
  *   4. ShoppingCartService — seed sample carts
- *   5. OrderService     — seed sample orders
+ *   5. OrderService     — seed 500 completed (delivered) orders across all buyers
  *   6. SellerService    — verify seller reference data
- *   7. InventoryService — seed subcategories, 50 products, product images
- *                         (buyer IDs from step 1 are passed here)
+ *   7. InventoryService — seed subcategories + 1,000 products (40 per seller) + images
  *
  * Usage:
  *   cd scripts && npm install && npx ts-node seed-all.ts
  *
  * Environment overrides (all default to local Docker ports):
- *   ACCOUNT_URL   http://localhost:3002
- *   ADMIN_URL     http://localhost:3003
- *   AUTHN_URL     http://localhost:3001
- *   CART_URL      http://localhost:3004
- *   ORDER_URL     http://localhost:3005
- *   SELLER_URL    http://localhost:3006
- *   INVENTORY_URL http://localhost:3007
- *   INTERNAL_SECRET internal-secret
+ *   ACCOUNT_URL      http://localhost:3002
+ *   ADMIN_URL        http://localhost:3003
+ *   AUTHN_URL        http://localhost:3001
+ *   CART_URL         http://localhost:3004
+ *   ORDER_URL        http://localhost:3005
+ *   SELLER_URL       http://localhost:3006
+ *   INVENTORY_URL    http://localhost:3007
+ *   INTERNAL_SECRET  internal-secret
  */
 
 const ACCOUNT_URL   = process.env.ACCOUNT_URL   || "http://localhost:3002";
@@ -57,7 +59,7 @@ async function seedPost(label: string, url: string, body: unknown = {}): Promise
     return json;
   } catch (err: any) {
     warn(`Service unreachable — ${err.message}`);
-    warn(`  Make sure services are running: npm run dev`);
+    warn(`  Make sure all services are running: docker compose up -d`);
     return null;
   }
 }
@@ -78,58 +80,70 @@ function info(msg: string): void { console.log(`  ℹ️   ${msg}`); }
 async function main(): Promise<void> {
   console.log("\n╔══════════════════════════════════════════════════════════════╗");
   console.log("║           SportVault — Master Seed Script                   ║");
+  console.log("║  135 accounts · 1,000 products · 500 delivered orders       ║");
   console.log("╚══════════════════════════════════════════════════════════════╝");
 
-  // 0. Admin account — must come first; admin approvals depend on this account
+  // ── Step 0: Primary admin (env-configured) ───────────────────────────────
   await seedPost(
-    "Step 0 — AccountService: seed initial admin account",
+    "Step 0 — AccountService: seed primary admin account (env credentials)",
     `${ACCOUNT_URL}/accounts/internal/seed-admin`
   );
 
-  // 1. Seed dummy buyer/seller accounts — capture BOTH buyer and seller IDs
+  // ── Step 1: 135 dummy accounts ───────────────────────────────────────────
   const accountResult = await seedPost(
-    "Step 1 — AccountService: seed 20 dummy accounts",
+    "Step 1 — AccountService: seed 100 buyers + 25 sellers + 10 admins",
     `${ACCOUNT_URL}/accounts/internal/seed`
   );
   const buyerIds:  string[] = accountResult?.buyer_ids  ?? [];
   const sellerIds: string[] = accountResult?.seller_ids ?? [];
-  info(`Buyer IDs: ${buyerIds.length}  |  Seller IDs: ${sellerIds.length}`);
+  const adminIds:  string[] = accountResult?.admin_ids  ?? [];
+  info(`Buyers: ${buyerIds.length}  |  Sellers: ${sellerIds.length}  |  Admins: ${adminIds.length}`);
 
-  // 2. Admin service — verify reference data
+  // ── Step 2: Admin reference data ────────────────────────────────────────
   await seedPost(
-    "Step 3 — AdminService: verify reference data",
+    "Step 2 — AdminService: verify reference data",
     `${ADMIN_URL}/admin/internal/seed`
   );
 
-  // 3. AuthnAuthz — verify DB
+  // ── Step 3: AuthnAuthz verification ─────────────────────────────────────
   await seedPost(
-    "Step 4 — AuthnAuthzService: verify auth DB",
+    "Step 3 — AuthnAuthzService: verify auth DB",
     `${AUTHN_URL}/auth/internal/seed`
   );
 
-  // 4. ShoppingCart
-// Step 5 — add third argument:
-  await seedPost("Step 5 — ShoppingCartService: seed sample carts",
-      `${CART_URL}/cart/internal/seed`, { buyerIds });
+  // ── Step 4: Shopping carts ───────────────────────────────────────────────
+  await seedPost(
+    "Step 4 — ShoppingCartService: seed sample carts",
+    `${CART_URL}/cart/internal/seed`,
+    { buyerIds }
+  );
 
-// Step 6 — add third argument:
-  await seedPost("Step 6 — OrderService: seed sample orders",
-      `${ORDER_URL}/orders/internal/seed`, { buyerIds });
-  // 6. Seller service
+  // ── Step 5: Inventory — 1,000 products across 25 sellers ─────────────────
+  // Must run BEFORE orders so we can pass real product IDs to the order seed.
+  const inventoryResult = await seedPost(
+    "Step 5 — InventoryService: seed subcategories + 1,000 products (40/seller) + images",
+    `${INVENTORY_URL}/inventory/internal/seed`,
+    { sellerIds }
+  );
+  const productIds: string[] = inventoryResult?.product_ids ?? [];
+  info(`Products seeded: ${productIds.length}`);
+
+  // ── Step 6: 500 delivered orders across all buyers ───────────────────────
+  await seedPost(
+    "Step 6 — OrderService: seed 500 delivered orders (5 per buyer)",
+    `${ORDER_URL}/orders/internal/seed`,
+    { buyerIds, productIds }
+  );
+
+  // ── Step 7: Seller reference data ───────────────────────────────────────
   await seedPost(
     "Step 7 — SellerService: verify seller reference data",
     `${SELLER_URL}/sellers/internal/seed`
   );
 
-  // 7. Inventory — pass seller IDs so products are listed under real seller accounts
-  await seedPost(
-    "Step 8 — InventoryService: seed subcategories + 50 products + images",
-    `${INVENTORY_URL}/inventory/internal/seed`,
-    { sellerIds }
-  );
-
   console.log("\n╔══════════════════════════════════════════════════════════════╗");
   console.log("║  Seed complete! Check service logs for detailed output.     ║");
+  console.log("║  Credentials file: resources/accounts.txt                  ║");
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
 }
 
