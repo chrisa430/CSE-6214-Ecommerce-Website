@@ -28,11 +28,11 @@
   ],
 
   "env": {
-    "VITE_AUTH_API_URL":      "@vite-auth-api-url",
-    "VITE_ACCOUNT_API_URL":   "@vite-account-api-url",
-    "VITE_ADMIN_API_URL":     "@vite-admin-api-url",
-    "VITE_CART_API_URL":      "@vite-cart-api-url",
-    "VITE_ORDER_API_URL":     "@vite-order-api-url",
-    "VITE_INVENTORY_API_URL": "@vite-inventory-api-url"
+    "VITE_AUTH_API_URL":      "https://api.sportsvault.co/auth",
+    "VITE_ACCOUNT_API_URL":   "https://api.sportsvault.co/accounts",
+    "VITE_ADMIN_API_URL":     "https://api.sportsvault.co/admin",
+    "VITE_CART_API_URL":      "https://api.sportsvault.co/cart",
+    "VITE_ORDER_API_URL":     "https://api.sportsvault.co/orders",
+    "VITE_INVENTORY_API_URL": "https://api.sportsvault.co/inventory"
   }
 }
