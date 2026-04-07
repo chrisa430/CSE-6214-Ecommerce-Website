@@ -6,7 +6,14 @@
   "devCommand": "npm run dev",
 
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/auth/:path*",      "destination": "https://api.sportvault.co/auth/:path*" },
+    { "source": "/api/accounts/:path*",  "destination": "https://api.sportvault.co/accounts/:path*" },
+    { "source": "/api/admin/:path*",     "destination": "https://api.sportvault.co/admin/:path*" },
+    { "source": "/api/inventory/:path*", "destination": "https://api.sportvault.co/inventory/:path*" },
+    { "source": "/api/cart/:path*",      "destination": "https://api.sportvault.co/cart/:path*" },
+    { "source": "/api/orders/:path*",    "destination": "https://api.sportvault.co/orders/:path*" },
+    { "source": "/api/sellers/:path*",   "destination": "https://api.sportvault.co/sellers/:path*" },
+    { "source": "/(.*)",                 "destination": "/index.html" }
   ],
 
   "headers": [
@@ -25,14 +32,5 @@
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     }
-  ],
-
-  "env": {
-    "VITE_AUTH_API_URL":      "https://api.sportsvault.co/auth",
-    "VITE_ACCOUNT_API_URL":   "https://api.sportsvault.co/accounts",
-    "VITE_ADMIN_API_URL":     "https://api.sportsvault.co/admin",
-    "VITE_CART_API_URL":      "https://api.sportsvault.co/cart",
-    "VITE_ORDER_API_URL":     "https://api.sportsvault.co/orders",
-    "VITE_INVENTORY_API_URL": "https://api.sportsvault.co/inventory"
-  }
+  ]
 }
