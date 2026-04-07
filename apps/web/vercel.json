@@ -1,6 +1,5 @@
 {
   "framework": "vite",
-  "rootDirectory": "apps/web",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
