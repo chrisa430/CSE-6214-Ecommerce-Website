@@ -1,0 +1,1390 @@
+# cfn/sportvault-stack.yaml
+# SportVault — Combined Infrastructure Stack
+#
+# Combines network, data, and services into a single CloudFormation template.
+# All !ImportValue references are replaced with direct !Ref / !GetAtt since
+# every resource lives in the same stack.
+#
+# Deploy command:
+#   aws cloudformation deploy \
+#     --template-file cfn/sportvault-stack.yaml \
+#     --stack-name sportvault \
+#     --parameter-overrides \
+#       CertificateArn=arn:aws:acm:us-east-1:<account>:certificate/<id> \
+#       DomainName=api.sportsvault.co \
+#       DBMasterPassword=<strong-password> \
+#       JwtAccessSecret=<random-32-char-string> \
+#       JwtRefreshSecret=<different-random-32-char-string> \
+#       SeedPassword=Test1234! \
+#       CorsOrigin=https://ms-state-spring-2026-cse-6633-intro.vercel.app \
+#       AppBaseUrl=https://www.sportvault.co \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --region us-east-1
+#
+# NOTE: Kafka runs on ECS Fargate (not MSK). It is reachable at
+#       kafka.sportvault.local:9092 via AWS Cloud Map service discovery.
+#       No MSK cluster is created. Stack provisions in ~5 minutes.
+#
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SportVault — Complete Infrastructure (Network + Data + Services)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ─────────────────────────────────────────────────────────────────────────────
+Parameters:
+
+  # ── Network / TLS ─────────────────────────────────────────────────────────
+  CertificateArn:
+    Type: String
+    Description: ARN of ACM certificate for your domain (must exist before deploy).
+
+  DomainName:
+    Type: String
+    Default: api.sportsvault.co
+    Description: Your API domain name (used for tagging only).
+
+  # ── Data ──────────────────────────────────────────────────────────────────
+  DBMasterPassword:
+    Type: String
+    NoEcho: true
+    Description: Master password for the RDS PostgreSQL instance.
+    MinLength: 8
+
+  JwtAccessSecret:
+    Type: String
+    NoEcho: true
+    Description: JWT access token signing secret (min 32 characters).
+    MinLength: 32
+
+  JwtRefreshSecret:
+    Type: String
+    NoEcho: true
+    Description: JWT refresh token signing secret (min 32 chars, different from access).
+    MinLength: 32
+
+  SeedPassword:
+    Type: String
+    NoEcho: true
+    Default: Test1234!
+    Description: Password for seeded buyer/seller accounts. Must match accounts.txt.
+
+  AdminPassword:
+    Type: String
+    NoEcho: true
+    Default: AdminPass123!
+    Description: Password for the primary admin account (admin@sportvault.local).
+
+  # ── Services ──────────────────────────────────────────────────────────────
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag to deploy (Git SHA or 'latest').
+
+  CorsOrigin:
+    Type: String
+    Default: https://ms-state-spring-2026-cse-6633-intro.vercel.app
+    Description: Allowed CORS origin — your Vercel production domain.
+
+  AppBaseUrl:
+    Type: String
+    Default: https://www.sportvault.co
+    Description: Frontend URL used in notification links.
+
+  OrderAge:
+    Type: Number
+    Default: 30
+    Description: Return window in days.
+
+  OutboxPollMs:
+    Type: Number
+    Default: 30000
+    Description: Notification outbox polling interval in milliseconds.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resources
+# ─────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # NETWORK
+  # ════════════════════════════════════════════════════════════════════════════
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: sportvault-vpc}]
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ── Security Groups ───────────────────────────────────────────────────────
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB allow HTTPS and HTTP from internet
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 80,  ToPort: 80,  CidrIp: 0.0.0.0/0}
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS tasks allow from ALB on service ports
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3007
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS allow from ECS only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+
+  # Allows all ECS tasks to reach the Fargate Kafka container on port 9092.
+  # Self-referencing rule must be a separate resource (not inline) in CFN.
+  ECSInternalKafkaIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ECSSecurityGroup
+      IpProtocol: tcp
+      FromPort: 9092
+      ToPort: 9092
+      SourceSecurityGroupId: !Ref ECSSecurityGroup
+
+  # ── Application Load Balancer ─────────────────────────────────────────────
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: sportvault-alb
+      Scheme: internet-facing
+      Subnets: [!Ref PublicSubnet1, !Ref PublicSubnet2]
+      SecurityGroups: [!Ref ALBSecurityGroup]
+
+  HTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 443
+      Protocol: HTTPS
+      Certificates: [{CertificateArn: !Ref CertificateArn}]
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig: {StatusCode: '404', ContentType: text/plain}
+
+  HTTPRedirectListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig: {Protocol: HTTPS, Port: '443', StatusCode: HTTP_301}
+
+  # ── Target Groups ─────────────────────────────────────────────────────────
+  AuthnTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: sportvault-authn-tg
+      Port: 3001
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  AccountTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: sportvault-account-tg
+      Port: 3002
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  AdminTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: sportvault-admin-tg
+      Port: 3003
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  CartTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: sportvault-cart-tg
+      Port: 3004
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  OrderTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: sportvault-order-tg
+      Port: 3005
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  SellerTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: sportvault-seller-tg
+      Port: 3006
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  InventoryTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: sportvault-inventory-tg
+      Port: 3007
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+
+  # ── ALB Listener Rules (path-based routing) ───────────────────────────────
+  AuthnRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 10
+      Conditions: [{Field: path-pattern, Values: ['/auth/*']}]
+      Actions: [{Type: forward, TargetGroupArn: !Ref AuthnTG}]
+
+  AccountRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 20
+      Conditions: [{Field: path-pattern, Values: ['/accounts/*']}]
+      Actions: [{Type: forward, TargetGroupArn: !Ref AccountTG}]
+
+  AdminRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 30
+      Conditions: [{Field: path-pattern, Values: ['/admin/*']}]
+      Actions: [{Type: forward, TargetGroupArn: !Ref AdminTG}]
+
+  CartRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 40
+      Conditions: [{Field: path-pattern, Values: ['/cart/*']}]
+      Actions: [{Type: forward, TargetGroupArn: !Ref CartTG}]
+
+  OrderRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 50
+      Conditions: [{Field: path-pattern, Values: ['/orders/*']}]
+      Actions: [{Type: forward, TargetGroupArn: !Ref OrderTG}]
+
+  SellerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 60
+      Conditions: [{Field: path-pattern, Values: ['/sellers/*']}]
+      Actions: [{Type: forward, TargetGroupArn: !Ref SellerTG}]
+
+  InventoryRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Priority: 70
+      Conditions: [{Field: path-pattern, Values: ['/inventory/*']}]
+      Actions: [{Type: forward, TargetGroupArn: !Ref InventoryTG}]
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # DATA
+  # ════════════════════════════════════════════════════════════════════════════
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: SportVault RDS subnets
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: sportvault-db
+      DBInstanceClass: db.t3.medium
+      Engine: postgres
+      EngineVersion: '16'
+      MasterUsername: sportvault_admin
+      MasterUserPassword: !Ref DBMasterPassword
+      AllocatedStorage: '20'
+      StorageType: gp3
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups: [!Ref RDSSecurityGroup]
+      PubliclyAccessible: false
+
+  # ── Secrets Manager ───────────────────────────────────────────────────────
+  JWTSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: sportvault/jwt
+      SecretString: !Sub |
+        {
+          "JWT_ACCESS_SECRET":  "${JwtAccessSecret}",
+          "JWT_REFRESH_SECRET": "${JwtRefreshSecret}"
+        }
+
+  AuthnDBSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: RDSInstance
+    Properties:
+      Name: sportvault/db/authn
+      SecretString: !Sub
+        - |
+          {
+            "DB_HOST": "${Host}",
+            "DB_PORT": "5432",
+            "DB_USER": "authn_user",
+            "DB_PASS": "authn_pass"
+          }
+        - Host: !GetAtt RDSInstance.Endpoint.Address
+
+  AccountDBSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: RDSInstance
+    Properties:
+      Name: sportvault/db/account
+      SecretString: !Sub
+        - |
+          {
+            "DB_HOST":             "${Host}",
+            "DB_PORT":             "5432",
+            "DB_USER":             "account_user",
+            "DB_PASS":             "account_pass",
+            "SEED_PASSWORD":       "${SeedPassword}",
+            "ADMIN_PASSWORD":      "${AdminPassword}",
+            "ADMIN_SEED_PASSWORD": "Admin1234!"
+          }
+        - Host: !GetAtt RDSInstance.Endpoint.Address
+
+  AdminDBSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: RDSInstance
+    Properties:
+      Name: sportvault/db/admin
+      SecretString: !Sub
+        - |
+          {
+            "DB_HOST":           "${Host}",
+            "DB_PORT":           "5432",
+            "DB_USER":           "admin_user",
+            "DB_PASS":           "admin_pass",
+            "ACCOUNT_DB_HOST":   "${Host}",
+            "ACCOUNT_DB_USER":   "account_user",
+            "ACCOUNT_DB_PASS":   "account_pass",
+            "INVENTORY_DB_HOST": "${Host}",
+            "INVENTORY_DB_USER": "inventory_user",
+            "INVENTORY_DB_PASS": "inventory_pass",
+            "ORDER_DB_HOST":     "${Host}",
+            "ORDER_DB_USER":     "order_user",
+            "ORDER_DB_PASS":     "order_pass"
+          }
+        - Host: !GetAtt RDSInstance.Endpoint.Address
+
+  CartDBSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: RDSInstance
+    Properties:
+      Name: sportvault/db/cart
+      SecretString: !Sub
+        - |
+          {
+            "DB_HOST": "${Host}",
+            "DB_PORT": "5432",
+            "DB_USER": "shopping_cart_user",
+            "DB_PASS": "shopping_cart_pass"
+          }
+        - Host: !GetAtt RDSInstance.Endpoint.Address
+
+  OrderDBSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: RDSInstance
+    Properties:
+      Name: sportvault/db/order
+      SecretString: !Sub
+        - |
+          {
+            "DB_HOST":           "${Host}",
+            "DB_PORT":           "5432",
+            "DB_USER":           "order_user",
+            "DB_PASS":           "order_pass",
+            "CART_DB_HOST":      "${Host}",
+            "CART_DB_USER":      "shopping_cart_user",
+            "CART_DB_PASS":      "shopping_cart_pass",
+            "INVENTORY_DB_HOST": "${Host}",
+            "INVENTORY_DB_USER": "inventory_user",
+            "INVENTORY_DB_PASS": "inventory_pass",
+            "ADMIN_DB_HOST":     "${Host}",
+            "ADMIN_DB_USER":     "admin_user",
+            "ADMIN_DB_PASS":     "admin_pass",
+            "ACCOUNT_DB_HOST":   "${Host}",
+            "ACCOUNT_DB_USER":   "account_user",
+            "ACCOUNT_DB_PASS":   "account_pass"
+          }
+        - Host: !GetAtt RDSInstance.Endpoint.Address
+
+  SellerDBSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: RDSInstance
+    Properties:
+      Name: sportvault/db/seller
+      SecretString: !Sub
+        - |
+          {
+            "DB_HOST": "${Host}",
+            "DB_PORT": "5432",
+            "DB_USER": "seller_user",
+            "DB_PASS": "seller_pass"
+          }
+        - Host: !GetAtt RDSInstance.Endpoint.Address
+
+  InventoryDBSecret:
+    Type: AWS::SecretsManager::Secret
+    DependsOn: RDSInstance
+    Properties:
+      Name: sportvault/db/inventory
+      SecretString: !Sub
+        - |
+          {
+            "DB_HOST": "${Host}",
+            "DB_PORT": "5432",
+            "DB_USER": "inventory_user",
+            "DB_PASS": "inventory_pass"
+          }
+        - Host: !GetAtt RDSInstance.Endpoint.Address
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICES
+  # ════════════════════════════════════════════════════════════════════════════
+
+  # ── Cloud Map (private DNS for Kafka service discovery) ──────────────────
+  KafkaDnsNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: sportvault.local
+      Vpc: !Ref VPC
+      Description: Private DNS namespace for SportVault internal service discovery
+
+  KafkaServiceRegistry:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: kafka
+      NamespaceId: !Ref KafkaDnsNamespace
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 10
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  # ── Account Service Cloud Map registry ───────────────────────────────────
+  # Registers account-service at account-service.sportvault.local:3002
+  # so authn-authz-service can reach it internally without going through the ALB.
+  AccountServiceRegistry:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: account-service
+      NamespaceId: !Ref KafkaDnsNamespace
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 10
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  # ── Kafka on Fargate (replaces MSK) ──────────────────────────────────────
+  # Runs ZooKeeper + Kafka in a single Fargate task. Cloud Map registers the
+  # task's private IP as kafka.sportvault.local so all service containers
+  # can reach it by DNS. Provisions in <2 minutes vs 45-60 for MSK.
+  KafkaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: /sportvault/kafka
+      RetentionInDays: 7
+
+  KafkaTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-kafka
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: zookeeper
+          Image: confluentinc/cp-zookeeper:7.6.1
+          PortMappings:
+            - {ContainerPort: 2181, Protocol: tcp}
+          Environment:
+            - {Name: ZOOKEEPER_CLIENT_PORT, Value: '2181'}
+            - {Name: ZOOKEEPER_TICK_TIME,   Value: '2000'}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/kafka
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: zookeeper
+          Essential: true
+
+        - Name: kafka
+          Image: confluentinc/cp-kafka:7.6.1
+          PortMappings:
+            - {ContainerPort: 9092, Protocol: tcp}
+          Environment:
+            - {Name: KAFKA_BROKER_ID,                        Value: '1'}
+            - {Name: KAFKA_ZOOKEEPER_CONNECT,                Value: 'localhost:2181'}
+            - {Name: KAFKA_ADVERTISED_LISTENERS,             Value: 'PLAINTEXT://kafka.sportvault.local:9092'}
+            - {Name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP,   Value: 'PLAINTEXT:PLAINTEXT'}
+            - {Name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, Value: '1'}
+            - {Name: KAFKA_AUTO_CREATE_TOPICS_ENABLE,        Value: 'true'}
+            - {Name: KAFKAJS_NO_PARTITIONER_WARNING,         Value: '1'}
+          DependsOn:
+            - {ContainerName: zookeeper, Condition: START}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/kafka
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: kafka
+          Essential: true
+
+  KafkaECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: sportvault-kafka
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref KafkaTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          AssignPublicIp: DISABLED
+      ServiceRegistries:
+        - RegistryArn: !GetAtt KafkaServiceRegistry.Arn
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+
+  # ── ECR Repositories ──────────────────────────────────────────────────────
+  AuthnECR:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sportvault/authn-authz-service
+      ImageScanningConfiguration: {ScanOnPush: true}
+
+  AccountECR:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sportvault/account-service
+      ImageScanningConfiguration: {ScanOnPush: true}
+
+  AdminECR:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sportvault/admin-service
+      ImageScanningConfiguration: {ScanOnPush: true}
+
+  CartECR:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sportvault/shopping-cart-service
+      ImageScanningConfiguration: {ScanOnPush: true}
+
+  OrderECR:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sportvault/order-service
+      ImageScanningConfiguration: {ScanOnPush: true}
+
+  SellerECR:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sportvault/seller-service
+      ImageScanningConfiguration: {ScanOnPush: true}
+
+  InventoryECR:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sportvault/inventory-service
+      ImageScanningConfiguration: {ScanOnPush: true}
+
+  # ── ECS Cluster ───────────────────────────────────────────────────────────
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: sportvault-cluster
+      CapacityProviders: [FARGATE, FARGATE_SPOT]
+      ClusterSettings:
+        - {Name: containerInsights, Value: enabled}
+
+  # ── CloudWatch Log Groups ─────────────────────────────────────────────────
+  AuthnLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties: {LogGroupName: /sportvault/authn-authz-service, RetentionInDays: 30}
+
+  AccountLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties: {LogGroupName: /sportvault/account-service, RetentionInDays: 30}
+
+  AdminLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties: {LogGroupName: /sportvault/admin-service, RetentionInDays: 30}
+
+  CartLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties: {LogGroupName: /sportvault/shopping-cart-service, RetentionInDays: 30}
+
+  OrderLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties: {LogGroupName: /sportvault/order-service, RetentionInDays: 30}
+
+  SellerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties: {LogGroupName: /sportvault/seller-service, RetentionInDays: 30}
+
+  InventoryLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties: {LogGroupName: /sportvault/inventory-service, RetentionInDays: 30}
+
+  # ── IAM Roles ─────────────────────────────────────────────────────────────
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sportvault-ecs-task-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ecs-tasks.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsManagerReadPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref JWTSecret
+                  - !Ref AuthnDBSecret
+                  - !Ref AccountDBSecret
+                  - !Ref AdminDBSecret
+                  - !Ref CartDBSecret
+                  - !Ref OrderDBSecret
+                  - !Ref SellerDBSecret
+                  - !Ref InventoryDBSecret
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sportvault-ecs-task-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ecs-tasks.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: '*'
+
+  # ── Task Definitions ──────────────────────────────────────────────────────
+  AuthnTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-authn
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: authn-authz-service
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sportvault/authn-authz-service:${ImageTag}'
+          PortMappings: [{ContainerPort: 3001, Protocol: tcp}]
+          Environment:
+            - {Name: NODE_ENV,               Value: production}
+            - {Name: PORT,                   Value: '3001'}
+            - {Name: DB_NAME,                Value: authn_authz}
+            - {Name: DB_PORT,                Value: '5432'}
+            - {Name: JWT_ACCESS_EXPIRES_IN,  Value: 15m}
+            - {Name: JWT_REFRESH_EXPIRES_IN, Value: 7d}
+            - {Name: CORS_ORIGIN,            Value: !Ref CorsOrigin}
+            - {Name: INTERNAL_SECRET,        Value: internal-secret}
+            - {Name: ACCOUNT_SERVICE_URL,    Value: 'http://account-service.sportvault.local:3002'}
+            - {Name: KAFKA_BROKERS,       Value: 'kafka.sportvault.local:9092'}
+          Secrets:
+            - {Name: DB_HOST,            ValueFrom: !Sub '${AuthnDBSecret}:DB_HOST::'}
+            - {Name: DB_USER,            ValueFrom: !Sub '${AuthnDBSecret}:DB_USER::'}
+            - {Name: DB_PASS,            ValueFrom: !Sub '${AuthnDBSecret}:DB_PASS::'}
+            - {Name: JWT_ACCESS_SECRET,  ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_REFRESH_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_REFRESH_SECRET::'}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/authn-authz-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Essential: true
+
+  AccountTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-account
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: account-service
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sportvault/account-service:${ImageTag}'
+          PortMappings: [{ContainerPort: 3002, Protocol: tcp}]
+          Environment:
+            - {Name: NODE_ENV,        Value: production}
+            - {Name: PORT,            Value: '3002'}
+            - {Name: DB_NAME,         Value: account}
+            - {Name: DB_PORT,         Value: '5432'}
+            - {Name: CORS_ORIGIN,     Value: !Ref CorsOrigin}
+            - {Name: APP_BASE_URL,    Value: !Ref AppBaseUrl}
+            - {Name: INTERNAL_SECRET, Value: internal-secret}
+            - {Name: ADMIN_EMAIL,     Value: admin@sportvault.local}
+            - {Name: ADMIN_FIRST,     Value: Sport}
+            - {Name: ADMIN_LAST,      Value: Vault}
+            - {Name: KAFKA_BROKERS,    Value: 'kafka.sportvault.local:9092'}
+          Secrets:
+            - {Name: DB_HOST,             ValueFrom: !Sub '${AccountDBSecret}:DB_HOST::'}
+            - {Name: DB_USER,             ValueFrom: !Sub '${AccountDBSecret}:DB_USER::'}
+            - {Name: DB_PASS,             ValueFrom: !Sub '${AccountDBSecret}:DB_PASS::'}
+            - {Name: SEED_PASSWORD,       ValueFrom: !Sub '${AccountDBSecret}:SEED_PASSWORD::'}
+            - {Name: ADMIN_PASSWORD,      ValueFrom: !Sub '${AccountDBSecret}:ADMIN_PASSWORD::'}
+            - {Name: ADMIN_SEED_PASSWORD, ValueFrom: !Sub '${AccountDBSecret}:ADMIN_SEED_PASSWORD::'}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/account-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Essential: true
+
+  AdminTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-admin
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: admin-service
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sportvault/admin-service:${ImageTag}'
+          PortMappings: [{ContainerPort: 3003, Protocol: tcp}]
+          Environment:
+            - {Name: NODE_ENV,           Value: production}
+            - {Name: PORT,               Value: '3003'}
+            - {Name: DB_NAME,            Value: admin}
+            - {Name: DB_PORT,            Value: '5432'}
+            - {Name: ACCOUNT_DB_NAME,    Value: account}
+            - {Name: INVENTORY_DB_NAME,  Value: inventory}
+            - {Name: ORDER_DB_NAME,      Value: order}
+            - {Name: ORDER_AGE,          Value: !Sub '${OrderAge}'}
+            - {Name: CORS_ORIGIN,        Value: !Ref CorsOrigin}
+            - {Name: APP_BASE_URL,       Value: !Ref AppBaseUrl}
+            - {Name: INTERNAL_SECRET,    Value: internal-secret}
+            - {Name: OUTBOX_POLL_MS,     Value: !Sub '${OutboxPollMs}'}
+            - {Name: KAFKA_BROKERS,     Value: 'kafka.sportvault.local:9092'}
+          Secrets:
+            - {Name: DB_HOST,           ValueFrom: !Sub '${AdminDBSecret}:DB_HOST::'}
+            - {Name: DB_USER,           ValueFrom: !Sub '${AdminDBSecret}:DB_USER::'}
+            - {Name: DB_PASS,           ValueFrom: !Sub '${AdminDBSecret}:DB_PASS::'}
+            - {Name: ACCOUNT_DB_HOST,   ValueFrom: !Sub '${AdminDBSecret}:ACCOUNT_DB_HOST::'}
+            - {Name: ACCOUNT_DB_USER,   ValueFrom: !Sub '${AdminDBSecret}:ACCOUNT_DB_USER::'}
+            - {Name: ACCOUNT_DB_PASS,   ValueFrom: !Sub '${AdminDBSecret}:ACCOUNT_DB_PASS::'}
+            - {Name: INVENTORY_DB_HOST, ValueFrom: !Sub '${AdminDBSecret}:INVENTORY_DB_HOST::'}
+            - {Name: INVENTORY_DB_USER, ValueFrom: !Sub '${AdminDBSecret}:INVENTORY_DB_USER::'}
+            - {Name: INVENTORY_DB_PASS, ValueFrom: !Sub '${AdminDBSecret}:INVENTORY_DB_PASS::'}
+            - {Name: ORDER_DB_HOST,     ValueFrom: !Sub '${AdminDBSecret}:ORDER_DB_HOST::'}
+            - {Name: ORDER_DB_USER,     ValueFrom: !Sub '${AdminDBSecret}:ORDER_DB_USER::'}
+            - {Name: ORDER_DB_PASS,     ValueFrom: !Sub '${AdminDBSecret}:ORDER_DB_PASS::'}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/admin-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Essential: true
+
+  CartTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-cart
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: shopping-cart-service
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sportvault/shopping-cart-service:${ImageTag}'
+          PortMappings: [{ContainerPort: 3004, Protocol: tcp}]
+          Environment:
+            - {Name: NODE_ENV,        Value: production}
+            - {Name: PORT,            Value: '3004'}
+            - {Name: DB_NAME,         Value: shopping_cart}
+            - {Name: DB_PORT,         Value: '5432'}
+            - {Name: CORS_ORIGIN,     Value: !Ref CorsOrigin}
+            - {Name: INTERNAL_SECRET, Value: internal-secret}
+            - {Name: KAFKA_BROKERS,    Value: 'kafka.sportvault.local:9092'}
+          Secrets:
+            - {Name: DB_HOST,           ValueFrom: !Sub '${CartDBSecret}:DB_HOST::'}
+            - {Name: DB_USER,           ValueFrom: !Sub '${CartDBSecret}:DB_USER::'}
+            - {Name: DB_PASS,           ValueFrom: !Sub '${CartDBSecret}:DB_PASS::'}
+            - {Name: JWT_ACCESS_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/shopping-cart-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Essential: true
+
+  OrderTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-order
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: order-service
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sportvault/order-service:${ImageTag}'
+          PortMappings: [{ContainerPort: 3005, Protocol: tcp}]
+          Environment:
+            - {Name: NODE_ENV,          Value: production}
+            - {Name: PORT,              Value: '3005'}
+            - {Name: DB_NAME,           Value: order}
+            - {Name: DB_PORT,           Value: '5432'}
+            - {Name: CART_DB_NAME,      Value: shopping_cart}
+            - {Name: INVENTORY_DB_NAME, Value: inventory}
+            - {Name: ADMIN_DB_NAME,     Value: admin}
+            - {Name: ACCOUNT_DB_NAME,   Value: account}
+            - {Name: ORDER_AGE,         Value: !Sub '${OrderAge}'}
+            - {Name: CORS_ORIGIN,       Value: !Ref CorsOrigin}
+            - {Name: APP_BASE_URL,      Value: !Ref AppBaseUrl}
+            - {Name: INTERNAL_SECRET,   Value: internal-secret}
+            - {Name: KAFKA_BROKERS,     Value: 'kafka.sportvault.local:9092'}
+          Secrets:
+            - {Name: DB_HOST,           ValueFrom: !Sub '${OrderDBSecret}:DB_HOST::'}
+            - {Name: DB_USER,           ValueFrom: !Sub '${OrderDBSecret}:DB_USER::'}
+            - {Name: DB_PASS,           ValueFrom: !Sub '${OrderDBSecret}:DB_PASS::'}
+            - {Name: CART_DB_HOST,      ValueFrom: !Sub '${OrderDBSecret}:CART_DB_HOST::'}
+            - {Name: CART_DB_USER,      ValueFrom: !Sub '${OrderDBSecret}:CART_DB_USER::'}
+            - {Name: CART_DB_PASS,      ValueFrom: !Sub '${OrderDBSecret}:CART_DB_PASS::'}
+            - {Name: INVENTORY_DB_HOST, ValueFrom: !Sub '${OrderDBSecret}:INVENTORY_DB_HOST::'}
+            - {Name: INVENTORY_DB_USER, ValueFrom: !Sub '${OrderDBSecret}:INVENTORY_DB_USER::'}
+            - {Name: INVENTORY_DB_PASS, ValueFrom: !Sub '${OrderDBSecret}:INVENTORY_DB_PASS::'}
+            - {Name: ADMIN_DB_HOST,     ValueFrom: !Sub '${OrderDBSecret}:ADMIN_DB_HOST::'}
+            - {Name: ADMIN_DB_USER,     ValueFrom: !Sub '${OrderDBSecret}:ADMIN_DB_USER::'}
+            - {Name: ADMIN_DB_PASS,     ValueFrom: !Sub '${OrderDBSecret}:ADMIN_DB_PASS::'}
+            - {Name: ACCOUNT_DB_HOST,   ValueFrom: !Sub '${OrderDBSecret}:ACCOUNT_DB_HOST::'}
+            - {Name: ACCOUNT_DB_USER,   ValueFrom: !Sub '${OrderDBSecret}:ACCOUNT_DB_USER::'}
+            - {Name: ACCOUNT_DB_PASS,   ValueFrom: !Sub '${OrderDBSecret}:ACCOUNT_DB_PASS::'}
+            - {Name: JWT_ACCESS_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/order-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Essential: true
+
+  SellerTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-seller
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: seller-service
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sportvault/seller-service:${ImageTag}'
+          PortMappings: [{ContainerPort: 3006, Protocol: tcp}]
+          Environment:
+            - {Name: NODE_ENV,        Value: production}
+            - {Name: PORT,            Value: '3006'}
+            - {Name: DB_NAME,         Value: seller}
+            - {Name: DB_PORT,         Value: '5432'}
+            - {Name: CORS_ORIGIN,     Value: !Ref CorsOrigin}
+            - {Name: INTERNAL_SECRET, Value: internal-secret}
+            - {Name: KAFKA_BROKERS,    Value: 'kafka.sportvault.local:9092'}
+          Secrets:
+            - {Name: DB_HOST,       ValueFrom: !Sub '${SellerDBSecret}:DB_HOST::'}
+            - {Name: DB_USER,       ValueFrom: !Sub '${SellerDBSecret}:DB_USER::'}
+            - {Name: DB_PASS,       ValueFrom: !Sub '${SellerDBSecret}:DB_PASS::'}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/seller-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Essential: true
+
+  InventoryTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sportvault-inventory
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: inventory-service
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sportvault/inventory-service:${ImageTag}'
+          PortMappings: [{ContainerPort: 3007, Protocol: tcp}]
+          Environment:
+            - {Name: NODE_ENV,        Value: production}
+            - {Name: PORT,            Value: '3007'}
+            - {Name: DB_NAME,         Value: inventory}
+            - {Name: DB_PORT,         Value: '5432'}
+            - {Name: CORS_ORIGIN,     Value: !Ref CorsOrigin}
+            - {Name: INTERNAL_SECRET, Value: internal-secret}
+            - {Name: KAFKA_BROKERS,     Value: 'kafka.sportvault.local:9092'}
+          Secrets:
+            - {Name: DB_HOST,           ValueFrom: !Sub '${InventoryDBSecret}:DB_HOST::'}
+            - {Name: DB_USER,           ValueFrom: !Sub '${InventoryDBSecret}:DB_USER::'}
+            - {Name: DB_PASS,           ValueFrom: !Sub '${InventoryDBSecret}:DB_PASS::'}
+            - {Name: JWT_ACCESS_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /sportvault/inventory-service
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Essential: true
+
+  # ── ECS Services ──────────────────────────────────────────────────────────
+  AuthnECSService:
+    Type: AWS::ECS::Service
+    DependsOn: AuthnRule
+    Properties:
+      ServiceName: sportvault-authn
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref AuthnTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: authn-authz-service
+          ContainerPort: 3001
+          TargetGroupArn: !Ref AuthnTG
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
+
+  AccountECSService:
+    Type: AWS::ECS::Service
+    DependsOn: AccountRule
+    Properties:
+      ServiceName: sportvault-account
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref AccountTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: account-service
+          ContainerPort: 3002
+          TargetGroupArn: !Ref AccountTG
+      ServiceRegistries:
+        - RegistryArn: !GetAtt AccountServiceRegistry.Arn
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
+
+  AdminECSService:
+    Type: AWS::ECS::Service
+    DependsOn: AdminRule
+    Properties:
+      ServiceName: sportvault-admin
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref AdminTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: admin-service
+          ContainerPort: 3003
+          TargetGroupArn: !Ref AdminTG
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
+
+  CartECSService:
+    Type: AWS::ECS::Service
+    DependsOn: CartRule
+    Properties:
+      ServiceName: sportvault-cart
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref CartTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: shopping-cart-service
+          ContainerPort: 3004
+          TargetGroupArn: !Ref CartTG
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
+
+  OrderECSService:
+    Type: AWS::ECS::Service
+    DependsOn: OrderRule
+    Properties:
+      ServiceName: sportvault-order
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref OrderTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: order-service
+          ContainerPort: 3005
+          TargetGroupArn: !Ref OrderTG
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
+
+  SellerECSService:
+    Type: AWS::ECS::Service
+    DependsOn: SellerRule
+    Properties:
+      ServiceName: sportvault-seller
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref SellerTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: seller-service
+          ContainerPort: 3006
+          TargetGroupArn: !Ref SellerTG
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
+
+  InventoryECSService:
+    Type: AWS::ECS::Service
+    DependsOn: InventoryRule
+    Properties:
+      ServiceName: sportvault-inventory
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref InventoryTaskDef
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          SecurityGroups: [!Ref ECSSecurityGroup]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - ContainerName: inventory-service
+          ContainerPort: 3007
+          TargetGroupArn: !Ref InventoryTG
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ─────────────────────────────────────────────────────────────────────────────
+Outputs:
+
+  ALBDNSName:
+    Description: ALB DNS name — create a CNAME record pointing your domain here
+    Value: !GetAtt ALB.DNSName
+
+  RDSEndpoint:
+    Description: RDS endpoint — connect via bastion to run init.sql files
+    Value: !GetAtt RDSInstance.Endpoint.Address
+
+  ECSClusterName:
+    Description: ECS cluster name — used in GitHub Actions deploy workflow
+    Value: !Ref ECSCluster
+
+  AuthnECRUri:
+    Value: !GetAtt AuthnECR.RepositoryUri
+
+  AccountECRUri:
+    Value: !GetAtt AccountECR.RepositoryUri
+
+  AdminECRUri:
+    Value: !GetAtt AdminECR.RepositoryUri
+
+  CartECRUri:
+    Value: !GetAtt CartECR.RepositoryUri
+
+  OrderECRUri:
+    Value: !GetAtt OrderECR.RepositoryUri
+
+  SellerECRUri:
+    Value: !GetAtt SellerECR.RepositoryUri
+
+  InventoryECRUri:
+    Value: !GetAtt InventoryECR.RepositoryUri
