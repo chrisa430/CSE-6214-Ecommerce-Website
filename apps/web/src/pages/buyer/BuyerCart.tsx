@@ -47,7 +47,7 @@ export default function BuyerCart() {
   }
 
   const subtotal = items.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
+    (sum, item) => sum + (item.unitPrice ?? 0) * item.quantity,
     0
   );
 
@@ -91,7 +91,7 @@ export default function BuyerCart() {
                       <td>{fullItem.name}</td>
                       <td>{item.quantity}</td>
                       <td>${Number(item.unitPrice).toFixed(2)}</td>
-                      <td>${Number(item.unitPrice * item.quantity).toFixed(2)}</td>
+                      <td>${Number((item.unitPrice ?? 0) * item.quantity).toFixed(2)}</td>
                       <td>
                         <button
                           className="btn btnDanger"
