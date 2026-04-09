@@ -20,7 +20,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-
+# Environment
+.env
 
 # OS / Editor
 .DS_Store
@@ -31,3 +32,4 @@ EOF
 
 # Misc files
 check.sh
+accounts.txt
