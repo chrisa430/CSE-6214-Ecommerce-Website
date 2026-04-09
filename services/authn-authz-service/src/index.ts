@@ -17,6 +17,7 @@ import authRoutes        from "./routes/auth";
 import { logger }        from "./logger";
 
 const app  = express();
+app.set("trust proxy", 1); // trust ALB X-Forwarded-For
 const PORT = parseInt(process.env.PORT || "3001");
 
 app.use(helmet()); // sets security headers

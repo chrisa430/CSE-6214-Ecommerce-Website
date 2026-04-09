@@ -53,6 +53,23 @@ When you recreate the environment, you will have to insert an admin record into 
 5. npx ts-node seed-admin.ts
 6. npm run seed:all
 
+### Unit Testing
+
+In order to run the unit tests simply:
+
+1. cd apps/web
+2. npm test
+
+### System Testing
+
+In order to run the system tests simply:
+
+1. Follow '### seed-admin.ts' to ensure accounts are seeded
+2. docker compose up
+3. npm run dev
+4. npm run test:e2e tests/e2e/system-flow.spec.ts (from root)
+5. npm run test:e2e tests/e2e/return-flow.spec.ts (from root)
+
 ## Notes
 ### Email Notifications
 In the current dev setup emails won't arrive in a real inbox. Instead the AdminService sends emails via Ethereal, a fake SMTP service used to test email functionality. The AdminService logs will have a link to the "email". Copy and
