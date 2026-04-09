@@ -8,6 +8,7 @@ dist/
 build/
 **/dist/
 **/build/
+test-results/
 
 # Vite / React caches
 .vite/

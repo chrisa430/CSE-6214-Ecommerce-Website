@@ -2,7 +2,7 @@
   "name": "sportvault",
   "version": "4.0.0",
   "private": true,
-  "description": "SportVault \u2013 Sprint 5: Full Microservices Platform",
+  "description": "SportVault – Sprint 5: Full Microservices Platform",
   "workspaces": [
     "apps/web",
     "services/authn-authz-service",
@@ -26,12 +26,14 @@
     "dev:order": "cd services/order-service && npm run dev",
     "dev:seller": "cd services/seller-service && npm run dev",
     "dev:inventory": "cd services/inventory-service && npm run dev",
-    "seed": "cd scripts && npx ts-node seed-all.ts"
+    "seed": "cd scripts && npx ts-node seed-all.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "concurrently": "^8.2.2"
   }
 }

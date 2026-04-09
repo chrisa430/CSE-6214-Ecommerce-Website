@@ -1,0 +1,64 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, chris-testing ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  codeql:
+    name: CodeQL Scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ "javascript-typescript" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm install
+
+      - name: Run npm audit at root
+        run: npm audit --audit-level=high || true
+
+      - name: Run npm audit in web app
+        working-directory: apps/web
+        run: npm audit --audit-level=high || true
