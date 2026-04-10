@@ -76,7 +76,8 @@ export default function AdminProducts() {
     setFeedback(null);
     setSelected(new Set());
     try {
-      setProducts(await fetchProducts());
+      const productsData = await fetchProducts();
+      setProducts(Array.isArray(productsData) ? productsData : []);
     } catch (err) {
       setFeedback({ kind: "error", msg: extractApiError(err) });
     } finally {

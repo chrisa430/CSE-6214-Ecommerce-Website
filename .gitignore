@@ -33,3 +33,7 @@ EOF
 # Misc files
 check.sh
 accounts.txt
+seed-admin.ts
+seed-all.ts
+seed-users.ts
+check.sh

@@ -114,7 +114,8 @@ export default function AdminOrders() {
     setOrdersLoading(true);
     setOrdersFeedback(null);
     try {
-      setOrders(await getAdminOrders());
+      const ordersData = await getAdminOrders();
+      setOrders(Array.isArray(ordersData) ? ordersData : []);
     } catch (err) {
       setOrdersFeedback({ kind: "error", msg: extractApiError(err) });
     } finally {

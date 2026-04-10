@@ -15,8 +15,8 @@ export default function BuyerCart() {
           getActiveProducts(),
         ]);
 
-        setItems(cartItems);
-        setProducts(activeProducts);
+        setItems(Array.isArray(cartItems) ? cartItems : []);
+        setProducts(Array.isArray(activeProducts) ? activeProducts : []);
       } catch (err) {
         console.error(err);
         setError("Failed to load cart.");
