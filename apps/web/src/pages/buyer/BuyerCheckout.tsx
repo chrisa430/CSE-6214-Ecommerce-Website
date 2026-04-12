@@ -22,7 +22,7 @@ export default function BuyerCheckout() {
     async function loadCart() {
       try {
         const data = await getCart();
-        setItems(data);
+        setItems(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error(err);
         setError("Failed to load cart");

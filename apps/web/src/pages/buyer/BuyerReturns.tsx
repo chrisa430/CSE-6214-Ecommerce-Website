@@ -35,7 +35,7 @@ export default function BuyerReturns() {
 
   useEffect(() => {
     getMyReturns()
-      .then((data) => setReturns(data))
+      .then((data) => setReturns(Array.isArray(data) ? data : []))
       .catch(() => setError("Failed to load returns."))
       .finally(() => setLoading(false));
   }, []);

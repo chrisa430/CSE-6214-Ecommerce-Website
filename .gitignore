@@ -20,7 +20,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-
+# Environment
+.env
 
 # OS / Editor
 .DS_Store
@@ -30,4 +31,9 @@ Thumbs.db
 EOF
 
 # Misc files
+check.sh
+accounts.txt
+seed-admin.ts
+seed-all.ts
+seed-users.ts
 check.sh
