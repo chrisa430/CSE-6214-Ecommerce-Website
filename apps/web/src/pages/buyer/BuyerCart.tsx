@@ -15,8 +15,8 @@ export default function BuyerCart() {
           getActiveProducts(),
         ]);
 
-        setItems(cartItems);
-        setProducts(activeProducts);
+        setItems(Array.isArray(cartItems) ? cartItems : []);
+        setProducts(Array.isArray(activeProducts) ? activeProducts : []);
       } catch (err) {
         console.error(err);
         setError("Failed to load cart.");
@@ -40,6 +40,7 @@ export default function BuyerCart() {
     try {
       await removeFromCart(productId);
       setItems((prev) => prev.filter((item) => item.productId !== productId));
+      window.dispatchEvent(new CustomEvent("cartUpdated"));
     } catch (err) {
       console.error(err);
       setError("Failed to remove item from cart.");
