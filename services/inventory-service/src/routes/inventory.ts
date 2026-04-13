@@ -27,6 +27,7 @@
  */
 import { Router, Request, Response } from "express";
 import { getPool }              from "../db/pool";
+import { getAccountPool }       from "../db/accountPool";
 import { publishEvent, TOPICS } from "../kafka/client";
 import { logger }               from "../logger";
 import { requireAuth }          from "../middleware/authGuard";
@@ -368,6 +369,355 @@ router.delete(
       res.json({ message: "Product removed" });
     } catch (err) {
       logger.error("Delete product error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── GET /inventory/trades/browse ─────────────────────────────────────────────
+// Returns active products NOT owned by the calling seller, for trade browsing.
+
+router.get(
+  "/trades/browse",
+  requireAuth,
+  requireRole("seller"),
+  async (req: Request, res: Response): Promise<void> => {
+    const sellerId = (req as any).user.sub as string;
+    try {
+      // Step 1: fetch active products from other sellers (inventory DB)
+      const products = await getPool().query(
+        `SELECT
+           p.id,
+           p.seller_id      AS "sellerId",
+           p.name,
+           p.short_desc     AS "shortDesc",
+           p.quantity,
+           p.unit_price     AS "unitPrice",
+           pst.name         AS status,
+           COALESCE(
+             (SELECT image_url FROM product_image
+              WHERE product_id = p.id AND is_primary = TRUE LIMIT 1),
+             (SELECT image_url FROM product_image WHERE product_id = p.id LIMIT 1),
+             '/images/default-product.png'
+           ) AS "imageUrl"
+         FROM product p
+         JOIN product_status_type pst ON pst.id = p.status_id
+         WHERE pst.code = 'active'
+           AND p.quantity > 0
+           AND p.seller_id != $1
+         ORDER BY p.created_at DESC`,
+        [sellerId]
+      );
+
+      if (!products.rowCount) { res.json([]); return; }
+
+      // Step 2: resolve unique seller names from the account DB (cross-DB)
+      const sellerIds: string[] = [...new Set(
+        products.rows.map((r: any) => r.sellerId as string)
+      )];
+
+      const accounts = await getAccountPool().query(
+        `SELECT id, first_name AS "firstName", last_name AS "lastName", user_id AS email
+         FROM account WHERE id = ANY($1::uuid[])`,
+        [sellerIds]
+      );
+
+      const sellerMap = new Map<string, { firstName: string; lastName: string; email: string }>();
+      for (const row of accounts.rows as { id: string; firstName: string; lastName: string; email: string }[]) {
+        sellerMap.set(row.id, { firstName: row.firstName, lastName: row.lastName, email: row.email });
+      }
+
+      // Step 3: merge and return
+      const enriched = products.rows.map((p: any) => {
+        const seller = sellerMap.get(p.sellerId);
+        return {
+          ...p,
+          sellerFirstName: seller?.firstName ?? "Seller",
+          sellerLastName:  seller?.lastName  ?? "",
+          sellerEmail:     seller?.email     ?? "",
+        };
+      });
+
+      res.json(enriched);
+    } catch (err) {
+      logger.error("Browse trades error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── POST /inventory/trades ────────────────────────────────────────────────────
+// Body: { offeredProductId, requestedProductId, notes? }
+// Creates a trade proposal from caller (proposer) to the owner of requestedProduct.
+
+router.post(
+  "/trades",
+  requireAuth,
+  requireRole("seller"),
+  async (req: Request, res: Response): Promise<void> => {
+    const proposerId = (req as any).user.sub as string;
+    const { offeredProductId, requestedProductId, notes } = req.body as {
+      offeredProductId?: string; requestedProductId?: string; notes?: string;
+    };
+
+    if (!offeredProductId || !requestedProductId) {
+      res.status(400).json({ error: "offeredProductId and requestedProductId are required" });
+      return;
+    }
+
+    const pool = getPool();
+    try {
+      // Verify offered product belongs to caller and is active
+      const offered = await pool.query(
+        `SELECT p.id, p.seller_id, pst.code AS status_code
+         FROM product p JOIN product_status_type pst ON pst.id = p.status_id
+         WHERE p.id = $1 AND p.seller_id = $2`,
+        [offeredProductId, proposerId]
+      );
+      if (!offered.rowCount) {
+        res.status(400).json({ error: "Offered product not found or does not belong to you" });
+        return;
+      }
+      if (offered.rows[0].status_code !== "active") {
+        res.status(400).json({ error: "Offered product must be active" });
+        return;
+      }
+
+      // Verify requested product belongs to a different seller and is active
+      const requested = await pool.query(
+        `SELECT p.id, p.seller_id, pst.code AS status_code
+         FROM product p JOIN product_status_type pst ON pst.id = p.status_id
+         WHERE p.id = $1`,
+        [requestedProductId]
+      );
+      if (!requested.rowCount) {
+        res.status(400).json({ error: "Requested product not found" });
+        return;
+      }
+      if (requested.rows[0].seller_id === proposerId) {
+        res.status(400).json({ error: "Cannot propose a trade for your own product" });
+        return;
+      }
+      if (requested.rows[0].status_code !== "active") {
+        res.status(400).json({ error: "Requested product is no longer available for trade" });
+        return;
+      }
+
+      // Check for duplicate pending trade between same products
+      const duplicate = await pool.query(
+        `SELECT id FROM trade_request
+         WHERE offered_product_id = $1 AND requested_product_id = $2
+           AND proposer_id = $3 AND status = 'pending'`,
+        [offeredProductId, requestedProductId, proposerId]
+      );
+      if (duplicate.rowCount && duplicate.rowCount > 0) {
+        res.status(409).json({ error: "You already have a pending trade proposal for these products" });
+        return;
+      }
+
+      const receiverId = requested.rows[0].seller_id as string;
+      const result = await pool.query(
+        `INSERT INTO trade_request
+           (proposer_id, receiver_id, offered_product_id, requested_product_id, notes)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, proposer_id AS "proposerId", receiver_id AS "receiverId",
+           offered_product_id AS "offeredProductId",
+           requested_product_id AS "requestedProductId",
+           status, notes, created_at AS "createdAt"`,
+        [proposerId, receiverId, offeredProductId, requestedProductId, notes ?? null]
+      );
+
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      logger.error("Propose trade error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── GET /inventory/trades/mine ────────────────────────────────────────────────
+// Returns all trades where caller is proposer OR receiver, enriched with product info.
+
+router.get(
+  "/trades/mine",
+  requireAuth,
+  requireRole("seller"),
+  async (req: Request, res: Response): Promise<void> => {
+    const sellerId = (req as any).user.sub as string;
+    try {
+      const result = await getPool().query(
+        `SELECT
+           tr.id,
+           tr.proposer_id            AS "proposerId",
+           tr.receiver_id            AS "receiverId",
+           tr.status,
+           tr.notes,
+           tr.created_at             AS "createdAt",
+           tr.updated_at             AS "updatedAt",
+           -- Offered product fields
+           op.id                     AS "offeredProductId",
+           op.name                   AS "offeredProductName",
+           op.unit_price             AS "offeredProductPrice",
+           COALESCE(
+             (SELECT image_url FROM product_image WHERE product_id = op.id AND is_primary = TRUE LIMIT 1),
+             (SELECT image_url FROM product_image WHERE product_id = op.id LIMIT 1),
+             '/images/default-product.png'
+           )                         AS "offeredProductImage",
+           -- Requested product fields
+           rp.id                     AS "requestedProductId",
+           rp.name                   AS "requestedProductName",
+           rp.unit_price             AS "requestedProductPrice",
+           COALESCE(
+             (SELECT image_url FROM product_image WHERE product_id = rp.id AND is_primary = TRUE LIMIT 1),
+             (SELECT image_url FROM product_image WHERE product_id = rp.id LIMIT 1),
+             '/images/default-product.png'
+           )                         AS "requestedProductImage"
+         FROM trade_request tr
+         JOIN product op ON op.id = tr.offered_product_id
+         JOIN product rp ON rp.id = tr.requested_product_id
+         WHERE tr.proposer_id = $1 OR tr.receiver_id = $1
+         ORDER BY tr.created_at DESC`,
+        [sellerId]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      logger.error("Get my trades error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── PUT /inventory/trades/:id/accept ─────────────────────────────────────────
+// Caller must be receiver. Marks both products as 'traded' and cancels any other
+// pending trades that involve either product.
+
+router.put(
+  "/trades/:id/accept",
+  requireAuth,
+  requireRole("seller"),
+  async (req: Request, res: Response): Promise<void> => {
+    const sellerId = (req as any).user.sub as string;
+    const tradeId  = req.params.id;
+    const pool     = getPool();
+
+    try {
+      const trade = await pool.query(
+        "SELECT * FROM trade_request WHERE id = $1", [tradeId]
+      );
+      if (!trade.rowCount) {
+        res.status(404).json({ error: "Trade not found" }); return;
+      }
+      const t = trade.rows[0] as {
+        id: string; receiver_id: string; status: string;
+        offered_product_id: string; requested_product_id: string;
+      };
+      if (t.receiver_id !== sellerId) {
+        res.status(403).json({ error: "Only the receiving seller can accept this trade" }); return;
+      }
+      if (t.status !== "pending") {
+        res.status(409).json({ error: `Trade is already ${t.status}` }); return;
+      }
+
+      const tradedStatusId = await getStatusId("traded");
+      if (!tradedStatusId) {
+        res.status(500).json({ error: "Status 'traded' not found — please restart the DB" }); return;
+      }
+
+      // Mark both products as 'traded'
+      await pool.query(
+        "UPDATE product SET status_id = $1, updated_at = NOW() WHERE id = ANY($2::uuid[])",
+        [tradedStatusId, [t.offered_product_id, t.requested_product_id]]
+      );
+
+      // Accept this trade
+      await pool.query(
+        "UPDATE trade_request SET status = 'accepted', updated_at = NOW() WHERE id = $1",
+        [tradeId]
+      );
+
+      // Cancel all other pending trades that involve either product
+      await pool.query(
+        `UPDATE trade_request
+         SET status = 'cancelled', updated_at = NOW()
+         WHERE id != $1 AND status = 'pending'
+           AND (
+             offered_product_id    = ANY($2::uuid[]) OR
+             requested_product_id  = ANY($2::uuid[])
+           )`,
+        [tradeId, [t.offered_product_id, t.requested_product_id]]
+      );
+
+      res.json({ message: "Trade accepted — both products have been marked as traded" });
+    } catch (err) {
+      logger.error("Accept trade error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── PUT /inventory/trades/:id/decline ────────────────────────────────────────
+// Caller must be receiver.
+
+router.put(
+  "/trades/:id/decline",
+  requireAuth,
+  requireRole("seller"),
+  async (req: Request, res: Response): Promise<void> => {
+    const sellerId = (req as any).user.sub as string;
+    const tradeId  = req.params.id;
+    const pool     = getPool();
+    try {
+      const trade = await pool.query(
+        "SELECT receiver_id, status FROM trade_request WHERE id = $1", [tradeId]
+      );
+      if (!trade.rowCount) { res.status(404).json({ error: "Trade not found" }); return; }
+      const { receiver_id, status } = trade.rows[0] as { receiver_id: string; status: string };
+      if (receiver_id !== sellerId) {
+        res.status(403).json({ error: "Only the receiving seller can decline this trade" }); return;
+      }
+      if (status !== "pending") {
+        res.status(409).json({ error: `Trade is already ${status}` }); return;
+      }
+      await pool.query(
+        "UPDATE trade_request SET status = 'declined', updated_at = NOW() WHERE id = $1", [tradeId]
+      );
+      res.json({ message: "Trade declined" });
+    } catch (err) {
+      logger.error("Decline trade error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── PUT /inventory/trades/:id/cancel ─────────────────────────────────────────
+// Caller must be proposer.
+
+router.put(
+  "/trades/:id/cancel",
+  requireAuth,
+  requireRole("seller"),
+  async (req: Request, res: Response): Promise<void> => {
+    const sellerId = (req as any).user.sub as string;
+    const tradeId  = req.params.id;
+    const pool     = getPool();
+    try {
+      const trade = await pool.query(
+        "SELECT proposer_id, status FROM trade_request WHERE id = $1", [tradeId]
+      );
+      if (!trade.rowCount) { res.status(404).json({ error: "Trade not found" }); return; }
+      const { proposer_id, status } = trade.rows[0] as { proposer_id: string; status: string };
+      if (proposer_id !== sellerId) {
+        res.status(403).json({ error: "Only the proposing seller can cancel this trade" }); return;
+      }
+      if (status !== "pending") {
+        res.status(409).json({ error: `Trade is already ${status}` }); return;
+      }
+      await pool.query(
+        "UPDATE trade_request SET status = 'cancelled', updated_at = NOW() WHERE id = $1", [tradeId]
+      );
+      res.json({ message: "Trade cancelled" });
+    } catch (err) {
+      logger.error("Cancel trade error", err);
       res.status(500).json({ error: "Internal server error" });
     }
   }

@@ -16,7 +16,8 @@ INSERT INTO product_status_type (code, name, short_desc, long_desc) VALUES
   ('active',    'active',    'Active',    'Product can be displayed and sold on the site'),
   ('suspended', 'suspended', 'Suspended', 'Product has been temporarily suspended'),
   ('removed',   'removed',   'Removed',   'The Seller has removed the product from sale on the site'),
-  ('open',      'open',      'Open',      'Product has been submitted for creation approval by an Admin')
+  ('open',      'open',      'Open',      'Product has been submitted for creation approval by an Admin'),
+  ('traded',    'traded',    'Traded',    'Product has been exchanged via a seller-to-seller trade')
 ON CONFLICT DO NOTHING;
 
 -- ── product_category ─────────────────────────────────────────────────────────
@@ -179,4 +180,27 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_product_updated_at
 BEFORE UPDATE ON product
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── trade_request ─────────────────────────────────────────────────────────────
+-- Tracks seller-to-seller trade proposals. Both products are locked to 'traded'
+-- status on acceptance; all other pending trades for those products are cancelled.
+CREATE TABLE IF NOT EXISTS trade_request (
+    id                    UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    proposer_id           UUID        NOT NULL,   -- seller who proposes the trade
+    receiver_id           UUID        NOT NULL,   -- seller who owns the requested product
+    offered_product_id    UUID        NOT NULL REFERENCES product(id),
+    requested_product_id  UUID        NOT NULL REFERENCES product(id),
+    status                VARCHAR(20) NOT NULL DEFAULT 'pending'
+                            CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled')),
+    notes                 TEXT,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_tr_proposer_id  ON trade_request(proposer_id);
+CREATE INDEX idx_tr_receiver_id  ON trade_request(receiver_id);
+CREATE INDEX idx_tr_status       ON trade_request(status);
+
+CREATE TRIGGER trg_trade_request_updated_at
+BEFORE UPDATE ON trade_request
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
