@@ -397,6 +397,11 @@ services:
       DB_NAME: inventory
       DB_USER: inventory_user
       DB_PASS: inventory_pass
+      ACCOUNT_DB_HOST: postgres-account
+      ACCOUNT_DB_PORT: 5432
+      ACCOUNT_DB_NAME: account
+      ACCOUNT_DB_USER: account_user
+      ACCOUNT_DB_PASS: account_pass
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: inventory-service
@@ -406,6 +411,7 @@ services:
       - "3007:3007"
     depends_on:
       - postgres-inventory
+      - postgres-account
       - kafka
     networks:
       - sportvault-net
