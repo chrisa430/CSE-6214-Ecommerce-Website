@@ -459,6 +459,27 @@ export async function updateOrderConfig(
   return data;
 }
 
+// ── Seller sales / earnings ───────────────────────────────────────────────────
+
+export interface SellerSale {
+  itemId:      string;
+  productId:   string;
+  productName: string;
+  quantity:    number;
+  unitPrice:   number;
+  lineTotal:   number;
+  imageUrl:    string | null;
+  orderId:     string;
+  orderDate:   string;
+  orderStatus: string;
+}
+
+/** Seller: fetch all their completed sales (order items where seller_id = me) */
+export async function getSellerSales(): Promise<SellerSale[]> {
+  const { data } = await orderApi.get<SellerSale[]>("/sales/mine");
+  return data;
+}
+
 /** Fetch all orders in the system — admin only */
 export async function getAdminOrders(): Promise<AdminOrder[]> {
   const { data } = await adminApi.get<AdminOrder[]>("/orders");
@@ -516,6 +537,82 @@ export async function requestReturn(
   reason?: string
 ): Promise<{ message: string; returnId: string; status: string }> {
   const { data } = await orderApi.post(`/${orderId}/return`, { orderItemId, reason });
+  return data;
+}
+
+// ── Seller trading ────────────────────────────────────────────────────────────
+
+/** Product visible on the trade browse page — includes seller identity */
+export interface TradableProduct {
+  id:              string;
+  sellerId:        string;
+  sellerFirstName: string;
+  sellerLastName:  string;
+  sellerEmail:     string;
+  name:            string;
+  shortDesc?:      string;
+  quantity:        number;
+  unitPrice:       number;
+  status:          string;
+  imageUrl?:       string;
+}
+
+/** A single trade request record, enriched with both products' info */
+export interface TradeRecord {
+  id:                    string;
+  proposerId:            string;
+  receiverId:            string;
+  status:                "pending" | "accepted" | "declined" | "cancelled";
+  notes:                 string | null;
+  createdAt:             string;
+  updatedAt:             string;
+  offeredProductId:      string;
+  offeredProductName:    string;
+  offeredProductPrice:   number;
+  offeredProductImage:   string;
+  requestedProductId:    string;
+  requestedProductName:  string;
+  requestedProductPrice: number;
+  requestedProductImage: string;
+}
+
+/** Browse active products from other sellers (seller-only) */
+export async function getBrowsableProducts(): Promise<TradableProduct[]> {
+  const { data } = await inventoryApi.get<TradableProduct[]>("/trades/browse");
+  return data;
+}
+
+/** Get all trades the calling seller is involved in */
+export async function getMyTrades(): Promise<TradeRecord[]> {
+  const { data } = await inventoryApi.get<TradeRecord[]>("/trades/mine");
+  return data;
+}
+
+/** Propose a trade: offer one of your products in exchange for another seller's */
+export async function proposeTrade(
+  offeredProductId: string,
+  requestedProductId: string,
+  notes?: string
+): Promise<{ id: string; status: string }> {
+  const { data } = await inventoryApi.post("/trades", { offeredProductId, requestedProductId, notes });
+  return data;
+}
+
+/** Accept an incoming trade (receiver only) */
+export async function acceptTrade(tradeId: string): Promise<{ message: string }> {
+  const { data } = await inventoryApi.put(`/trades/${tradeId}/accept`);
+  return data;
+}
+
+/** Decline an incoming trade (receiver only) */
+export async function declineTrade(tradeId: string): Promise<{ message: string }> {
+  const { data } = await inventoryApi.put(`/trades/${tradeId}/decline`);
+  return data;
+}
+
+/** Cancel an outgoing trade proposal (proposer only) */
+export async function cancelTrade(tradeId: string): Promise<{ message: string }> {
+  const { data } = await inventoryApi.put(`/trades/${tradeId}/cancel`);
   return data;
 }
 
