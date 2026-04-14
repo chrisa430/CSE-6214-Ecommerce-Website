@@ -2,6 +2,11 @@
 -- account database schema
 -- Used by AccountService
 -- ============================================================
+-- Changelog:
+--   2026-04-13  DLH772  Added profile_picture / mime_type to account;
+--                       added nickname to payment_method;
+--                       added enforce_payment_method_limit trigger.
+-- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -82,18 +87,20 @@ ON CONFLICT DO NOTHING;
 -- ── Core tables ────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS account (
-    id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id          VARCHAR(255) NOT NULL UNIQUE,   -- email address
-    password_hash    VARCHAR(255) NOT NULL,          -- bcrypt hash
-    first_name       VARCHAR(128) NOT NULL,
-    last_name        VARCHAR(128) NOT NULL,
-    activated_date   TIMESTAMPTZ,                    -- set when status transitions to 'active'
-    suspended_date   TIMESTAMPTZ,                    -- set when status transitions to 'suspended'
-    closed_date      TIMESTAMPTZ,                    -- set when status transitions to 'closed'
-    type_id          UUID         NOT NULL REFERENCES account_type(id),
-    status_id        UUID         NOT NULL REFERENCES account_status(id),
-    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    id                    UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id               VARCHAR(255) NOT NULL UNIQUE,   -- email address
+    password_hash         VARCHAR(255) NOT NULL,          -- bcrypt hash
+    first_name            VARCHAR(128) NOT NULL,
+    last_name             VARCHAR(128) NOT NULL,
+    activated_date        TIMESTAMPTZ,                    -- set when status transitions to 'active'
+    suspended_date        TIMESTAMPTZ,                    -- set when status transitions to 'suspended'
+    closed_date           TIMESTAMPTZ,                    -- set when status transitions to 'closed'
+    type_id               UUID         NOT NULL REFERENCES account_type(id),
+    status_id             UUID         NOT NULL REFERENCES account_status(id),
+    profile_picture       TEXT,                           -- base64-encoded image data
+    profile_picture_mime  VARCHAR(64),                    -- e.g. image/jpeg, image/png
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_account_user_id ON account(user_id);
@@ -123,17 +130,43 @@ CREATE TABLE IF NOT EXISTS address (
 
 CREATE INDEX idx_address_account_id ON address(account_id);
 
+-- One billing and one shipping address per account (enables upsert)
+ALTER TABLE address ADD CONSTRAINT uq_address_account_type UNIQUE (account_id, address_type);
+
 CREATE TABLE IF NOT EXISTS payment_method (
-    id          UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id  UUID    NOT NULL REFERENCES account(id) ON DELETE CASCADE,
-    type        UUID    NOT NULL REFERENCES payment_method_type(id),
-    card_number VARCHAR(20),       -- last-4 digits only stored in production
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id  UUID         NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+    type        UUID         NOT NULL REFERENCES payment_method_type(id),
+    nickname    VARCHAR(128),              -- optional user-supplied label
+    card_number VARCHAR(20),              -- last-4 digits only stored in production
     exp_month   INTEGER,
     exp_year    INTEGER,
-    cvv2        INTEGER            -- never stored in production; schema reference only
+    cvv2        INTEGER                   -- never stored in production; schema reference only
 );
 
 CREATE INDEX idx_pm_account_id ON payment_method(account_id);
+
+-- Enforce a maximum of two payment methods per buyer account
+CREATE OR REPLACE FUNCTION enforce_payment_method_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+  pm_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO pm_count
+  FROM payment_method
+  WHERE account_id = NEW.account_id;
+
+  IF pm_count >= 2 THEN
+    RAISE EXCEPTION 'A buyer account may have at most 2 payment methods.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_payment_method_limit
+BEFORE INSERT ON payment_method
+FOR EACH ROW EXECUTE FUNCTION enforce_payment_method_limit();
 
 -- Trigger to auto-update updated_at on account rows
 CREATE OR REPLACE FUNCTION set_updated_at()

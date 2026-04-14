@@ -11,11 +11,14 @@ import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 
-import { testConnection } from "./db/pool";
-import { getProducer }   from "./kafka/client";
-import { startConsumer } from "./kafka/consumer";
-import accountRoutes     from "./routes/accounts";
-import { logger }        from "./logger";
+import { testConnection }     from "./db/pool";
+import { getProducer }        from "./kafka/client";
+import { startConsumer }      from "./kafka/consumer";
+import accountRoutes          from "./routes/accounts";
+import addressRoutes          from "./routes/addresses";
+import paymentMethodRoutes    from "./routes/paymentMethods";
+import profilePictureRoutes   from "./routes/profilePicture";
+import { logger }             from "./logger";
 
 const app  = express();
 const PORT = parseInt(process.env.PORT || "3002");
@@ -31,7 +34,7 @@ const registerLimiter = rateLimit({
   message: { error: "Too many registration attempts. Please try again later." },
 });
 
-app.use(express.json({ limit: "16kb" }));
+app.use(express.json({ limit: "16kb" }));   // multipart handled by multer — JSON stays small
 
 app.get("/health", (_req, res) => {
   res.json({ service: "AccountService", status: "ok", ts: new Date().toISOString() });
@@ -40,6 +43,12 @@ app.get("/health", (_req, res) => {
 app.use("/accounts/register", registerLimiter);
 app.use("/accounts", accountRoutes);
 app.use("/internal/accounts", accountRoutes);
+
+// ── Profile-management routes (auth-guarded) ──────────────────────────────────
+// Mounted before the generic 404 handler; mergeParams is set on each sub-router.
+app.use("/accounts/:id/addresses",        addressRoutes);
+app.use("/accounts/:id/payment-methods",  paymentMethodRoutes);
+app.use("/accounts/:id/profile-picture",  profilePictureRoutes);
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
