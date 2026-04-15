@@ -162,6 +162,19 @@ CREATE UNIQUE INDEX idx_pi_one_primary
     ON product_image(product_id)
     WHERE is_primary = TRUE;
 
+-- ── product_review ───────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS product_review (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID        NOT NULL REFERENCES product(id) ON DELETE CASCADE,
+    buyer_id   UUID        NOT NULL,                -- FK to account.account (app-enforced)
+    rating     INTEGER     NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    review     TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (product_id, buyer_id)
+);
+CREATE INDEX idx_pr_product_id ON product_review(product_id);
+CREATE INDEX idx_pr_buyer_id   ON product_review(buyer_id);
+
 -- ── inventory_audit_log ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS inventory_audit_log (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

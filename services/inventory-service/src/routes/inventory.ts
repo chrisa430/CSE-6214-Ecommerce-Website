@@ -75,6 +75,7 @@ router.get("/products/active", async (_req: Request, res: Response): Promise<voi
     const result = await getPool().query(
       `SELECT
          p.id,
+         p.seller_id   AS "sellerId",
          p.name,
          p.short_desc  AS "shortDesc",
          p.long_desc   AS "longDesc",
@@ -369,6 +370,76 @@ router.delete(
       res.json({ message: "Product removed" });
     } catch (err) {
       logger.error("Delete product error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── GET /inventory/products/:id/reviews ──────────────────────────────────────
+
+router.get("/products/:id/reviews", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await getPool().query(
+      `SELECT id, buyer_id AS "buyerId", rating, review,
+              created_at AS "createdAt"
+       FROM product_review
+       WHERE product_id = $1
+       ORDER BY created_at DESC`,
+      [req.params.id]
+    );
+    const avg = await getPool().query(
+      `SELECT ROUND(AVG(rating)::numeric, 1) AS average, COUNT(*) AS total
+       FROM product_review WHERE product_id = $1`,
+      [req.params.id]
+    );
+    res.json({
+      reviews: result.rows,
+      averageRating: parseFloat(avg.rows[0].average) || null,
+      totalReviews: parseInt(avg.rows[0].total),
+    });
+  } catch (err) {
+    logger.error("Get product reviews error", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── POST /inventory/products/:id/reviews ─────────────────────────────────────
+// Body: { rating: 1-5, review?: string }
+
+router.post(
+  "/products/:id/reviews",
+  requireAuth,
+  requireRole("buyer"),
+  async (req: Request, res: Response): Promise<void> => {
+    const buyerId   = (req as any).user.sub as string;
+    const productId = req.params.id;
+    const { rating, review } = req.body as { rating?: number; review?: string };
+
+    if (!rating || rating < 1 || rating > 5) {
+      res.status(400).json({ error: "rating must be an integer between 1 and 5" });
+      return;
+    }
+
+    try {
+      const product = await getPool().query(
+        "SELECT id FROM product WHERE id = $1", [productId]
+      );
+      if (!product.rowCount) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+      }
+
+      const result = await getPool().query(
+        `INSERT INTO product_review (product_id, buyer_id, rating, review)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (product_id, buyer_id)
+         DO UPDATE SET rating = EXCLUDED.rating, review = EXCLUDED.review
+         RETURNING id, buyer_id AS "buyerId", rating, review, created_at AS "createdAt"`,
+        [productId, buyerId, rating, review ?? null]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      logger.error("Submit product review error", err);
       res.status(500).json({ error: "Internal server error" });
     }
   }

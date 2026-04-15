@@ -37,8 +37,13 @@ const adminProductApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+const sellerApi = axios.create({
+  baseURL: "/api/sellers",
+  headers: { "Content-Type": "application/json" },
+});
+
 // Attach JWT to every authenticated request automatically
-[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi, adminProductApi].forEach((instance) => {
+[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi, adminProductApi, sellerApi].forEach((instance) => {
   instance.interceptors.request.use((config) => {
     const token = localStorage.getItem("accessToken");
     if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -120,6 +125,7 @@ export function extractApiError(err: unknown): string {
 
 export interface Product {
   id: string;
+  sellerId?: string;
   name: string;
   shortDesc?: string;
   longDesc?: string;
@@ -624,4 +630,88 @@ export async function actionReturn(
 ): Promise<{ message: string; action: string; updated: number }> {
   const { data } = await orderApi.put("/returns/action", { returnIds, action, notes });
   return data;
+}
+
+// ── Reviews ───────────────────────────────────────────────────────────────────
+
+export interface Review {
+  id:        string;
+  buyerId:   string;
+  rating:    number;
+  review:    string | null;
+  createdAt: string;
+}
+
+export interface ReviewsResponse {
+  reviews:       Review[];
+  averageRating: number | null;
+  totalReviews:  number;
+}
+
+/** Fetch all reviews for a product */
+export async function getProductReviews(productId: string): Promise<ReviewsResponse> {
+  const { data } = await inventoryApi.get<ReviewsResponse>(`/products/${productId}/reviews`);
+  return data;
+}
+
+/** Submit (or update) a review for a product — buyer only */
+export async function submitProductReview(
+  productId: string,
+  rating:    number,
+  review?:   string
+): Promise<Review> {
+  const { data } = await inventoryApi.post<Review>(`/products/${productId}/reviews`, { rating, review });
+  return data;
+}
+
+export interface SellerProfile {
+  id:         string;
+  sellerId:   string;
+  storeName:  string | null;
+  bio:        string | null;
+  statusName: string;
+  createdAt:  string;
+}
+
+/** Fetch a seller's public profile */
+export async function getSellerProfile(sellerId: string): Promise<SellerProfile> {
+  const { data } = await sellerApi.get<SellerProfile>(`/${sellerId}`);
+  return data;
+}
+
+export interface AccountInfo {
+  id:        string;
+  email:     string;
+  firstName: string;
+  lastName:  string;
+  type:      string;
+  status:    string;
+}
+
+/** Fetch basic account info by ID (public endpoint) */
+export async function getAccountById(id: string): Promise<AccountInfo> {
+  const { data } = await accountApi.get<AccountInfo>(`/${id}`);
+  return data;
+}
+
+/** Fetch all reviews for a seller */
+export async function getSellerReviews(sellerId: string): Promise<ReviewsResponse> {
+  const { data } = await sellerApi.get<ReviewsResponse>(`/${sellerId}/reviews`);
+  return data;
+}
+
+/** Submit (or update) a review for a seller — buyer only */
+export async function submitSellerReview(
+  sellerId: string,
+  rating:   number,
+  review?:  string
+): Promise<Review> {
+  const { data } = await sellerApi.post<Review>(`/${sellerId}/reviews`, { rating, review });
+  return data;
+}
+
+/** Fetch active products belonging to a specific seller */
+export async function getProductsBySeller(sellerId: string): Promise<Product[]> {
+  const { data } = await inventoryApi.get<Product[]>("/products/active");
+  return (data as (Product & { sellerId?: string })[]).filter((p) => p.sellerId === sellerId);
 }
