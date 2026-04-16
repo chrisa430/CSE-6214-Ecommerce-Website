@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS product_image (
     name        VARCHAR(255),
     short_desc  VARCHAR(128),
     long_desc   TEXT,
-    image_url   VARCHAR(2048) NOT NULL,
+    image_url   TEXT NOT NULL,
     sort_order  INTEGER       NOT NULL DEFAULT 0,
     is_primary  BOOLEAN       NOT NULL DEFAULT FALSE
 );
