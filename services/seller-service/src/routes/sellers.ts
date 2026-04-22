@@ -6,6 +6,7 @@
  */
 import { Router, Request, Response } from "express";
 import { getPool }              from "../db/pool";
+import { getAccountPool }       from "../db/accountPool";
 import { logger }               from "../logger";
 import { requireAuth }          from "../middleware/authGuard";
 import { requireRole }          from "../middleware/requireRole";
@@ -65,8 +66,25 @@ router.get("/:id/reviews", async (req: Request, res: Response): Promise<void> =>
        FROM seller_rating WHERE seller_id = $1`,
       [req.params.id]
     );
+    // Enrich each review with the buyer's name from the account DB
+    const reviews = result.rows;
+    if (reviews.length > 0) {
+      const buyerIds = [...new Set(reviews.map((r: any) => r.buyerId))];
+      const accounts = await getAccountPool().query(
+        `SELECT id, first_name AS "firstName", last_name AS "lastName"
+         FROM account WHERE id = ANY($1::uuid[])`,
+        [buyerIds]
+      );
+      const nameMap: Record<string, { firstName: string; lastName: string }> = {};
+      for (const row of accounts.rows) nameMap[row.id] = row;
+      for (const r of reviews) {
+        r.buyerFirstName = nameMap[r.buyerId]?.firstName ?? null;
+        r.buyerLastName  = nameMap[r.buyerId]?.lastName  ?? null;
+      }
+    }
+
     res.json({
-      reviews: result.rows,
+      reviews,
       averageRating: parseFloat(avg.rows[0].average) || null,
       totalReviews: parseInt(avg.rows[0].total),
     });

@@ -635,11 +635,13 @@ export async function actionReturn(
 // ── Reviews ───────────────────────────────────────────────────────────────────
 
 export interface Review {
-  id:        string;
-  buyerId:   string;
-  rating:    number;
-  review:    string | null;
-  createdAt: string;
+  id:              string;
+  buyerId:         string;
+  buyerFirstName:  string | null;
+  buyerLastName:   string | null;
+  rating:          number;
+  review:          string | null;
+  createdAt:       string;
 }
 
 export interface ReviewsResponse {

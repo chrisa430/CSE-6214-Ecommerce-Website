@@ -273,6 +273,11 @@ export default function BuyerProductDetail() {
               <div key={r.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <StarDisplay rating={r.rating} />
+                  {(r.buyerFirstName || r.buyerLastName) && (
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>
+                      {[r.buyerFirstName, r.buyerLastName].filter(Boolean).join(" ")}
+                    </span>
+                  )}
                   <span className="muted" style={{ fontSize: 12 }}>
                     {new Date(r.createdAt).toLocaleDateString()}
                   </span>
