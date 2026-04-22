@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS completed_order_items (
                                                      id         UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id   UUID           NOT NULL REFERENCES "order"(id) ON DELETE CASCADE,
     product_id UUID           NOT NULL,       -- FK to inventory.product (cross-DB ref, enforced by app)
+    seller_id  UUID,                          -- FK to account.account (cross-DB ref, enforced by app)
     quantity   INTEGER        NOT NULL DEFAULT 1 CHECK (quantity > 0),
     unit_price NUMERIC(10,2)  NOT NULL,
     name       VARCHAR(255),
@@ -94,6 +95,7 @@ CREATE TABLE IF NOT EXISTS completed_order_items (
 
 CREATE INDEX idx_coi_order_id   ON completed_order_items(order_id);
 CREATE INDEX idx_coi_product_id ON completed_order_items(product_id);
+CREATE INDEX idx_coi_seller_id  ON completed_order_items(seller_id);
 
 CREATE TABLE IF NOT EXISTS address (
                                        id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),

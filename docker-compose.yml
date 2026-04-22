@@ -375,10 +375,16 @@ services:
       KAFKA_CLIENT_ID: seller-service
       INTERNAL_SECRET: internal-secret
       CORS_ORIGIN: http://localhost:5173
+      ACCOUNT_DB_HOST: postgres-account
+      ACCOUNT_DB_PORT: 5432
+      ACCOUNT_DB_NAME: account
+      ACCOUNT_DB_USER: account_user
+      ACCOUNT_DB_PASS: account_pass
     ports:
       - "3006:3006"
     depends_on:
       - postgres-seller
+      - postgres-account
       - kafka
     networks:
       - sportvault-net
