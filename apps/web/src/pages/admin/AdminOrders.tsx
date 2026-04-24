@@ -10,6 +10,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate }                       from "react-router-dom";
 import { useAuth }                           from "../../context/AuthContext";
+import Pagination from "../../components/Pagination";
+
+const PAGE_SIZE = 15;
 import {
   getOrderConfig,
   updateOrderConfig,
@@ -88,6 +91,7 @@ export default function AdminOrders() {
   const [ordersFeedback, setOrdersFeedback] = useState<{ kind: "error"; msg: string } | null>(null);
   const [searchBuyer,    setSearchBuyer]   = useState("");
   const [filterStatus,   setFilterStatus]  = useState("");
+  const [page,           setPage]          = useState(1);
 
   // Admin guard
   useEffect(() => {
@@ -154,6 +158,8 @@ export default function AdminOrders() {
     }
     return true;
   });
+  const totalPages   = Math.ceil(filtered.length / PAGE_SIZE);
+  const pageFiltered = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (!user || user.type !== "admin") {
     return (
@@ -263,7 +269,7 @@ export default function AdminOrders() {
               type="text"
               placeholder="First or last name…"
               value={searchBuyer}
-              onChange={(e) => setSearchBuyer(e.target.value)}
+              onChange={(e) => { setSearchBuyer(e.target.value); setPage(1); }}
               style={{ ...inputStyle, width: 200 }}
             />
           </div>
@@ -271,7 +277,7 @@ export default function AdminOrders() {
             <label style={labelStyle}>Status</label>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
               style={{ ...inputStyle, width: 160, cursor: "pointer" }}
             >
               <option value="">All Statuses</option>
@@ -286,7 +292,7 @@ export default function AdminOrders() {
           {(searchBuyer || filterStatus) && (
             <button
               className="btn"
-              onClick={() => { setSearchBuyer(""); setFilterStatus(""); }}
+              onClick={() => { setSearchBuyer(""); setFilterStatus(""); setPage(1); }}
               style={{ alignSelf: "flex-end" }}
             >
               Clear Filters
@@ -311,44 +317,53 @@ export default function AdminOrders() {
             {orders.length === 0 ? "No orders in the system yet." : "No orders match the selected filters."}
           </p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className="table" style={{ minWidth: 860 }}>
-              <thead>
-                <tr>
-                  <th>Order #</th>
-                  <th>Date</th>
-                  <th>Buyer</th>
-                  <th>Seller(s)</th>
-                  <th style={{ textAlign: "right" }}>Total</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((order) => (
-                  <tr key={order.id}>
-                    <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--muted)" }}>
-                      {order.id.slice(0, 8).toUpperCase()}
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--muted)" }}>
-                      {fmtDate(order.createdAt)}
-                    </td>
-                    <td style={{ fontWeight: 500 }}>
-                      {order.buyerFirstName} {order.buyerLastName}
-                    </td>
-                    <td style={{ fontSize: 13 }}>
-                      {order.sellerNames.join(", ")}
-                    </td>
-                    <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                      ${Number(order.total).toFixed(2)}
-                    </td>
-                    <td>
-                      <StatusBadge status={order.status} />
-                    </td>
+          <>
+            <div style={{ overflowX: "auto" }}>
+              <table className="table" style={{ minWidth: 860 }}>
+                <thead>
+                  <tr>
+                    <th>Order #</th>
+                    <th>Date</th>
+                    <th>Buyer</th>
+                    <th>Seller(s)</th>
+                    <th style={{ textAlign: "right" }}>Total</th>
+                    <th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {pageFiltered.map((order) => (
+                    <tr key={order.id}>
+                      <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--muted)" }}>
+                        {order.id.slice(0, 8).toUpperCase()}
+                      </td>
+                      <td style={{ fontSize: 12, color: "var(--muted)" }}>
+                        {fmtDate(order.createdAt)}
+                      </td>
+                      <td style={{ fontWeight: 500 }}>
+                        {order.buyerFirstName} {order.buyerLastName}
+                      </td>
+                      <td style={{ fontSize: 13 }}>
+                        {order.sellerNames.join(", ")}
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                        ${Number(order.total).toFixed(2)}
+                      </td>
+                      <td>
+                        <StatusBadge status={order.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={filtered.length}
+              pageSize={PAGE_SIZE}
+              onChange={setPage}
+            />
+          </>
         )}
       </div>
     </div>

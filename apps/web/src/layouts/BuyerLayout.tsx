@@ -34,20 +34,29 @@ export default function BuyerLayout() {
   return (
     <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "280px 1fr" }}>
       <aside style={{ padding: 18 }}>
-        <div className="card cardPad" style={{ height: "calc(100vh - 36px)", position: "sticky", top: 18 }}>
-          <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
-            <div className="col" style={{ gap: 6 }}>
-              <div className="badge">SportVault • Buyer</div>
-              <div className="h2">User Account</div>
-              <div className="muted" style={{ fontSize: 13 }}>
-                Browse approved products, manage your cart, and review checkout totals.
-              </div>
+        <div
+          className="card cardPad"
+          style={{
+            height: "calc(100vh - 36px)",
+            position: "sticky",
+            top: 18,
+            display: "flex",
+            flexDirection: "column",
+            background: "linear-gradient(168deg, rgba(22, 10, 55, 0.97) 0%, rgba(9, 7, 26, 0.98) 100%)",
+            borderColor: "rgba(124, 92, 255, 0.28)",
+          }}
+        >
+          <div className="col" style={{ gap: 6 }}>
+            <div className="badge">SportVault • Buyer</div>
+            <div className="h2">User Account</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              Browse approved products, manage your cart, and review checkout totals.
             </div>
           </div>
 
           <div className="divider" />
 
-          <nav className="col" style={{ gap: 10 }}>
+          <nav className="col" style={{ gap: 8 }}>
             <NavItem to="/buyer/profile">Account Profile</NavItem>
             <NavItem to="/buyer">Browse Products</NavItem>
             <NavItem to="/buyer/cart">
@@ -108,24 +117,8 @@ export default function BuyerLayout() {
 
       <main style={{ padding: 18 }}>
         <header className="container" style={{ marginBottom: 14 }}>
-          <div
-            className="card cardPad"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-            }}
-          >
-            <div className="col" style={{ gap: 4 }}>
-              <div className="h1">Buyer Portal</div>
-            </div>
-
-            <div className="row" style={{ alignItems: "center" }}>
-              <button className="btn" onClick={() => navigate("/buyer")}>
-                Refresh
-              </button>
-            </div>
+          <div className="card cardPad">
+            <div className="h1">Buyer Portal</div>
           </div>
         </header>
 
@@ -143,15 +136,20 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
       to={to}
       end={to === "/buyer"}
       style={({ isActive }) => ({
-        padding: "10px 12px",
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: isActive ? "rgba(124, 92, 255, 0.18)" : "rgba(255,255,255,0.04)",
-        color: "rgba(255,255,255,0.92)",
+        padding: "10px 14px",
+        borderRadius: 10,
+        border: isActive
+          ? "1px solid rgba(124, 92, 255, 0.50)"
+          : "1px solid rgba(255, 255, 255, 0.14)",
+        background: isActive
+          ? "linear-gradient(135deg, rgba(124, 92, 255, 0.32), rgba(124, 92, 255, 0.18))"
+          : "rgba(255, 255, 255, 0.06)",
+        color: isActive ? "#fff" : "rgba(255, 255, 255, 0.82)",
         fontWeight: 600,
         fontSize: 13,
         textDecoration: "none",
         display: "block",
+        transition: "all 120ms ease",
       })}
     >
       {children}

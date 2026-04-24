@@ -21,6 +21,8 @@ export default function SellerLayout() {
             top: 18,
             display: "flex",
             flexDirection: "column",
+            background: "linear-gradient(168deg, rgba(22, 10, 55, 0.97) 0%, rgba(9, 7, 26, 0.98) 100%)",
+            borderColor: "rgba(124, 92, 255, 0.28)",
           }}
         >
           <div className="col" style={{ gap: 6 }}>
@@ -40,12 +42,13 @@ export default function SellerLayout() {
 
           <div className="divider" />
 
-          <nav className="col" style={{ gap: 10 }}>
+          <nav className="col" style={{ gap: 8 }}>
             <NavItem to="/seller">Dashboard</NavItem>
             <NavItem to="/seller/profile">Account Profile</NavItem>
             <NavItem to="/seller/inventory">Inventory</NavItem>
             <NavItem to="/seller/returns">Returns</NavItem>
             <NavItem to="/seller/trades">Trades</NavItem>
+            <NavItem to="/seller/wallet">Wallet &amp; Withdraw</NavItem>
           </nav>
 
           <div style={{ flex: 1 }} />
@@ -59,19 +62,8 @@ export default function SellerLayout() {
 
       <main style={{ padding: 18 }}>
         <header className="container" style={{ marginBottom: 14 }}>
-          <div
-            className="card cardPad"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-            }}
-          >
+          <div className="card cardPad">
             <div className="h1">Seller Portal</div>
-            <button className="btn" onClick={() => navigate("/seller")}>
-              Refresh
-            </button>
           </div>
         </header>
 
@@ -88,13 +80,19 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
     <NavLink
       to={to}
       style={({ isActive }) => ({
-        padding: "10px 12px",
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: isActive ? "rgba(124, 92, 255, 0.18)" : "rgba(255,255,255,0.04)",
-        color: "rgba(255,255,255,0.92)",
+        padding: "10px 14px",
+        borderRadius: 10,
+        border: isActive
+          ? "1px solid rgba(124, 92, 255, 0.50)"
+          : "1px solid rgba(255, 255, 255, 0.14)",
+        background: isActive
+          ? "linear-gradient(135deg, rgba(124, 92, 255, 0.32), rgba(124, 92, 255, 0.18))"
+          : "rgba(255, 255, 255, 0.06)",
+        color: isActive ? "#fff" : "rgba(255, 255, 255, 0.82)",
         fontWeight: 600,
         fontSize: 13,
+        transition: "all 120ms ease",
+        display: "block",
       })}
     >
       {children}

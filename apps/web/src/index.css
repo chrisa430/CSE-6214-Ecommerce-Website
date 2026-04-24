@@ -1,11 +1,11 @@
 :root {
-  --bg: #0b1220;
-  --panel: rgba(255, 255, 255, 0.06);
-  --panel-2: rgba(255, 255, 255, 0.08);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.70);
-  --border: rgba(255, 255, 255, 0.12);
-  --shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  --bg: #080d1a;
+  --panel: rgba(255, 255, 255, 0.09);
+  --panel-2: rgba(255, 255, 255, 0.13);
+  --text: rgba(255, 255, 255, 0.95);
+  --muted: rgba(255, 255, 255, 0.68);
+  --border: rgba(255, 255, 255, 0.16);
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   --radius: 16px;
 
   --accent: #7c5cff;
@@ -30,10 +30,11 @@ body {
   font-family: var(--font);
   color: var(--text);
   background:
-    radial-gradient(1200px 600px at 10% 10%, rgba(124, 92, 255, 0.35), transparent 55%),
-    radial-gradient(900px 500px at 90% 20%, rgba(34, 197, 94, 0.18), transparent 55%),
-    radial-gradient(700px 450px at 50% 90%, rgba(59, 130, 246, 0.12), transparent 60%),
+    radial-gradient(ellipse 75% 55% at 12% 12%, rgba(124, 92, 255, 0.42), transparent 60%),
+    radial-gradient(ellipse 60% 48% at 88% 18%, rgba(34, 197, 94, 0.22), transparent 58%),
+    radial-gradient(ellipse 55% 42% at 50% 92%, rgba(59, 130, 246, 0.18), transparent 62%),
     var(--bg);
+  background-attachment: fixed;
 }
 
 a {
@@ -51,7 +52,7 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(14px);
 }
 
 .cardPad {
@@ -88,71 +89,88 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  background: rgba(124, 92, 255, 0.12);
   font-size: 12px;
-  color: var(--muted);
+  font-weight: 600;
+  color: rgba(180, 160, 255, 0.95);
 }
 
 .btn {
   appearance: none;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  background: rgba(255, 255, 255, 0.09);
   color: var(--text);
-  padding: 10px 14px;
+  padding: 10px 16px;
   border-radius: 12px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 13px;
   transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
 }
 
 .btn:hover {
-  background: rgba(255, 255, 255, 0.10);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.28);
   transform: translateY(-1px);
 }
 
 .btnPrimary {
-  border-color: rgba(124, 92, 255, 0.35);
-  background: linear-gradient(180deg, rgba(124, 92, 255, 0.35), rgba(124, 92, 255, 0.18));
+  border-color: rgba(124, 92, 255, 0.55);
+  background: linear-gradient(180deg, rgba(124, 92, 255, 0.50), rgba(124, 92, 255, 0.32));
+  color: #fff;
 }
 
 .btnPrimary:hover {
-  border-color: rgba(124, 92, 255, 0.55);
-  background: linear-gradient(180deg, rgba(124, 92, 255, 0.45), rgba(124, 92, 255, 0.22));
+  border-color: rgba(124, 92, 255, 0.75);
+  background: linear-gradient(180deg, rgba(124, 92, 255, 0.62), rgba(124, 92, 255, 0.42));
 }
 
 .btnDanger {
-  border-color: rgba(239, 68, 68, 0.35);
-  background: linear-gradient(180deg, rgba(239, 68, 68, 0.28), rgba(239, 68, 68, 0.12));
+  border-color: rgba(239, 68, 68, 0.45);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.38), rgba(239, 68, 68, 0.20));
+  color: #fff;
+}
+
+.btnDanger:hover {
+  border-color: rgba(239, 68, 68, 0.65);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.50), rgba(239, 68, 68, 0.30));
 }
 
 .input {
   width: 100%;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text);
-  padding: 11px 12px;
+  padding: 11px 14px;
   border-radius: 12px;
   outline: none;
+  font-size: 14px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.38);
 }
 
 .input:focus {
-  border-color: rgba(124, 92, 255, 0.55);
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.18);
+  border-color: rgba(124, 92, 255, 0.70);
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.22);
+  background: rgba(255, 255, 255, 0.11);
 }
 
 .label {
   font-size: 13px;
-  color: var(--muted);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.80);
   margin-bottom: 6px;
 }
 
 .divider {
   height: 1px;
-  background: var(--border);
+  background: rgba(255, 255, 255, 0.12);
   margin: 14px 0;
 }
 
@@ -161,21 +179,28 @@ a {
   border-collapse: collapse;
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .table th,
 .table td {
   text-align: left;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   font-size: 13px;
 }
 
 .table th {
-  color: var(--muted);
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.60);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
 }
 
 .kpi {

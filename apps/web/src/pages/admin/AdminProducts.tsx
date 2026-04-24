@@ -20,6 +20,9 @@ import {
   ProductSummary,
   extractApiError,
 } from "../../services/api";
+import Pagination from "../../components/Pagination";
+
+const PAGE_SIZE = 15;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +68,7 @@ export default function AdminProducts() {
   const [filterStatus,   setFilterStatus]   = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [searchName,     setSearchName]     = useState("");
+  const [page, setPage] = useState(1);
 
   // Admin-only guard
   useEffect(() => {
@@ -131,6 +135,8 @@ export default function AdminProducts() {
     if (searchName     && !p.name.toLowerCase().includes(searchName.toLowerCase())) return false;
     return true;
   });
+  const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
+  const pageFiltered = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const categories = [...new Set(products.map((p) => ({ code: p.categoryCode, name: p.category }))
     .map((c) => JSON.stringify(c)))]
@@ -176,7 +182,7 @@ export default function AdminProducts() {
               type="text"
               placeholder="Type to filter…"
               value={searchName}
-              onChange={(e) => setSearchName(e.target.value)}
+              onChange={(e) => { setSearchName(e.target.value); setPage(1); }}
               style={{ ...selectStyle, minWidth: 200 }}
             />
           </div>
@@ -184,7 +190,7 @@ export default function AdminProducts() {
           {/* Category filter */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={labelStyle}>Category</label>
-            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={selectStyle}>
+            <select value={filterCategory} onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }} style={selectStyle}>
               <option value="">All Categories</option>
               {categories.map((c) => (
                 <option key={c.code} value={c.code}>{c.name}</option>
@@ -195,7 +201,7 @@ export default function AdminProducts() {
           {/* Status filter */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={labelStyle}>Status</label>
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={selectStyle}>
+            <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} style={selectStyle}>
               <option value="">All Statuses</option>
               <option value="active">Active</option>
               <option value="suspended">Suspended</option>
@@ -208,7 +214,7 @@ export default function AdminProducts() {
           {(filterStatus || filterCategory || searchName) && (
             <button
               className="btn"
-              onClick={() => { setFilterStatus(""); setFilterCategory(""); setSearchName(""); }}
+              onClick={() => { setFilterStatus(""); setFilterCategory(""); setSearchName(""); setPage(1); }}
               style={{ alignSelf: "flex-end" }}
             >
               Clear Filters
@@ -262,7 +268,7 @@ export default function AdminProducts() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((product) => {
+                  {pageFiltered.map((product) => {
                     const isSelected = selected.has(product.id);
                     return (
                       <tr
@@ -309,6 +315,14 @@ export default function AdminProducts() {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={filtered.length}
+              pageSize={PAGE_SIZE}
+              onChange={setPage}
+            />
 
             {/* Bulk actions toolbar */}
             <div style={{

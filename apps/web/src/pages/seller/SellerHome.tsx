@@ -2,11 +2,15 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getSellerSales, SellerSale } from "../../services/api";
+import Pagination from "../../components/Pagination";
+
+const SALES_PAGE_SIZE = 10;
 
 export default function SellerHome() {
   const { user } = useAuth();
   const [sales, setSales] = useState<SellerSale[]>([]);
   const [loading, setLoading] = useState(true);
+  const [salesPage, setSalesPage] = useState(1);
 
   useEffect(() => {
     getSellerSales()
@@ -15,10 +19,11 @@ export default function SellerHome() {
       .finally(() => setLoading(false));
   }, []);
 
-  const totalRevenue   = sales.reduce((sum, s) => sum + Number(s.lineTotal), 0);
-  const totalUnitsSold = sales.reduce((sum, s) => sum + s.quantity, 0);
-  const uniqueOrders   = new Set(sales.map((s) => s.orderId)).size;
-  const recentSales    = sales.slice(0, 10);
+  const totalRevenue    = sales.reduce((sum, s) => sum + Number(s.lineTotal), 0);
+  const totalUnitsSold  = sales.reduce((sum, s) => sum + s.quantity, 0);
+  const uniqueOrders    = new Set(sales.map((s) => s.orderId)).size;
+  const salesTotalPages = Math.ceil(sales.length / SALES_PAGE_SIZE);
+  const pageSales       = sales.slice((salesPage - 1) * SALES_PAGE_SIZE, salesPage * SALES_PAGE_SIZE);
 
   const STATUS_COLORS: Record<string, string> = {
     delivered: "rgba(50,200,100,0.9)",
@@ -78,6 +83,8 @@ export default function SellerHome() {
           desc="Review and action buyer return requests." />
         <QuickAction to="/seller/trades" label="Trades"
           desc="Propose and accept seller-to-seller swaps." />
+        <QuickAction to="/seller/wallet" label="Wallet & Withdraw"
+          desc="Withdraw your earnings to your bank account." />
       </div>
 
       {/* Recent sales */}
@@ -86,7 +93,7 @@ export default function SellerHome() {
 
         {loading ? (
           <div className="muted">Loading sales…</div>
-        ) : recentSales.length === 0 ? (
+        ) : sales.length === 0 ? (
           <div className="muted" style={{ fontSize: 13 }}>
             No sales yet. Your earnings will appear here once a buyer purchases one of your products.
           </div>
@@ -103,7 +110,7 @@ export default function SellerHome() {
               </tr>
             </thead>
             <tbody>
-              {recentSales.map((sale) => (
+              {pageSales.map((sale) => (
                 <tr key={sale.itemId}>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -142,11 +149,13 @@ export default function SellerHome() {
           </table>
         )}
 
-        {sales.length > 10 && (
-          <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            Showing 10 of {sales.length} sales.
-          </div>
-        )}
+        <Pagination
+          page={salesPage}
+          totalPages={salesTotalPages}
+          totalItems={sales.length}
+          pageSize={SALES_PAGE_SIZE}
+          onChange={setSalesPage}
+        />
       </div>
     </div>
   );

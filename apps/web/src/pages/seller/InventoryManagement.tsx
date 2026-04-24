@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Pagination from "../../components/Pagination";
+
+const PAGE_SIZE = 12;
 import {
   Category,
   createProduct,
@@ -59,6 +62,7 @@ export default function InventoryManagement() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
@@ -308,7 +312,7 @@ export default function InventoryManagement() {
             marginTop: 28,
           }}
         >
-          {items.map((item) => (
+          {items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => (
             <div
               key={item.id}
               style={{
@@ -384,6 +388,14 @@ export default function InventoryManagement() {
           ))}
         </div>
       )}
+
+      <Pagination
+        page={page}
+        totalPages={Math.ceil(items.length / PAGE_SIZE)}
+        totalItems={items.length}
+        pageSize={PAGE_SIZE}
+        onChange={setPage}
+      />
 
       {/* ── Add Product Modal ── */}
       {showAddModal && (

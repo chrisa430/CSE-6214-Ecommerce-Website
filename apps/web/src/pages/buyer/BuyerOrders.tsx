@@ -8,6 +8,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate }         from "react-router-dom";
 import { getMyOrders, Order, getOrderConfig, OrderConfig } from "../../services/api";
+import Pagination from "../../components/Pagination";
+
+const PAGE_SIZE = 5;
 
 function fmtDate(val: string) {
   return new Date(val).toLocaleDateString("en-US", { year:"numeric", month:"short", day:"numeric" });
@@ -41,6 +44,7 @@ export default function BuyerOrders() {
   const [orderAge, setOrderAge] = useState(60);
   const [error,  setError]      = useState("");
   const [loading, setLoading]   = useState(true);
+  const [page, setPage]         = useState(1);
 
   useEffect(() => {
     async function load() {
@@ -68,6 +72,9 @@ export default function BuyerOrders() {
     return days <= orderAge;
   }
 
+  const totalPages = Math.ceil(orders.length / PAGE_SIZE);
+  const pageOrders = orders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   if (loading) return <div className="card cardPad">Loading orders…</div>;
 
   return (
@@ -84,7 +91,7 @@ export default function BuyerOrders() {
       {orders.length === 0 ? (
         <div className="card cardPad">No orders yet.</div>
       ) : (
-        orders.map((order) => {
+        pageOrders.map((order) => {
           const canReturn = isWithinReturnWindow(order.createdAt);
           return (
             <div key={order.id} className="card cardPad">
@@ -143,6 +150,14 @@ export default function BuyerOrders() {
           );
         })
       )}
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={orders.length}
+        pageSize={PAGE_SIZE}
+        onChange={setPage}
+      />
     </div>
   );
 }

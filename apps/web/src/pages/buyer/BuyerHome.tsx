@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { addToCart, getActiveProducts, Product } from "../../services/api";
 import { useCompare } from "../../context/CompareContext";
+import Pagination from "../../components/Pagination";
+
+const PAGE_SIZE = 12;
 
 export default function BuyerHome() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -9,6 +12,7 @@ export default function BuyerHome() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const { compareList, addToCompare, removeFromCompare, isInCompare } = useCompare();
   const navigate = useNavigate();
@@ -57,6 +61,8 @@ export default function BuyerHome() {
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(search.toLowerCase())
   );
+  const totalPages = Math.ceil(filteredProducts.length / PAGE_SIZE);
+  const pageProducts = filteredProducts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (loading) {
     return <div className="card cardPad">Loading products...</div>;
@@ -98,7 +104,7 @@ export default function BuyerHome() {
             type="text"
             placeholder="Search products"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
 
@@ -114,7 +120,7 @@ export default function BuyerHome() {
           gap: 20,
         }}
       >
-        {filteredProducts.map((product) => {
+        {pageProducts.map((product) => {
           const inCompare = isInCompare(product.id);
           return (
             <div
@@ -205,6 +211,14 @@ export default function BuyerHome() {
           );
         })}
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={filteredProducts.length}
+        pageSize={PAGE_SIZE}
+        onChange={setPage}
+      />
 
       {/* Floating compare bar */}
       {compareList.length > 0 && (
