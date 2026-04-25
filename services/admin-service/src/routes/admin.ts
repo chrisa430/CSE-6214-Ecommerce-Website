@@ -307,7 +307,8 @@ router.post("/accounts/decision", async (req: Request, res: Response): Promise<v
       }
     }
 
-    logger.info(`Admin ${decision}d accounts: [${accountIds.join(", ")}]`);
+    const sanitizedAccountIds = accountIds.map((id) => String(id).replace(/[\r\n]/g, ""));
+    logger.info(`Admin ${decision}d accounts: [${sanitizedAccountIds.join(", ")}]`);
     res.json({ message: `Accounts ${decision}d successfully.`, count: accountIds.length });
   } catch (err) {
     logger.error("Account decision error", err);
