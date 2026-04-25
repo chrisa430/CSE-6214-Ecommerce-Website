@@ -44,6 +44,7 @@ export default function BuyerCheckout() {
     try {
       await checkout();
 
+      window.dispatchEvent(new CustomEvent("cartUpdated"));
       alert("✅ Order placed successfully!");
       navigate("/buyer/orders");
     } catch (err) {

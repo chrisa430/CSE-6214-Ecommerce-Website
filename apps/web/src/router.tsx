@@ -21,6 +21,8 @@ import BuyerOrders from "./pages/buyer/BuyerOrders";
 import BuyerOrderDetail from "./pages/buyer/BuyerOrderDetail";
 import BuyerReturns from "./pages/buyer/BuyerReturns";
 import BuyerCompare from "./pages/buyer/BuyerCompare";
+import BuyerProductDetail from "./pages/buyer/BuyerProductDetail";
+import BuyerSellerPage from "./pages/buyer/BuyerSellerPage";
 
 import SellerLayout  from "./layouts/SellerLayout";
 import SellerHome    from "./pages/seller/SellerHome";
@@ -62,6 +64,8 @@ export const router = createBrowserRouter([
       { path: "orders/:orderId",    element: <BuyerOrderDetail /> },
       { path: "returns",            element: <BuyerReturns /> },
       { path: "compare",            element: <BuyerCompare /> },
+      { path: "products/:id",       element: <BuyerProductDetail /> },
+      { path: "sellers/:sellerId",  element: <BuyerSellerPage /> },
     ],
   },
 
