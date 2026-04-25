@@ -137,16 +137,10 @@ export default function BuyerHome() {
                   borderRadius: 8,
                   background: "#181717",
                   padding: 6,
-                  cursor: "pointer",
                 }}
-                onClick={() => navigate(`/buyer/products/${product.id}`)}
               />
 
-              <div
-                className="h2"
-                style={{ fontSize: 18, cursor: "pointer" }}
-                onClick={() => navigate(`/buyer/products/${product.id}`)}
-              >
+              <div className="h2" style={{ fontSize: 18 }}>
                 {product.name}
               </div>
 
@@ -176,14 +170,6 @@ export default function BuyerHome() {
                   Add to Cart
                 </button>
               )}
-
-              <button
-                className="btn"
-                style={{ fontSize: 12 }}
-                onClick={() => navigate(`/buyer/products/${product.id}`)}
-              >
-                View Details &amp; Reviews
-              </button>
 
               <button
                 className="btn"

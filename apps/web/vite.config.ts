@@ -42,12 +42,6 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/orders/, "/orders"),
       },
-      // Proxy seller calls to SellerService (:3006)
-      "/api/sellers": {
-        target: "http://localhost:3006",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/sellers/, "/sellers"),
-      },
     },
   },
 });
