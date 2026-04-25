@@ -13,7 +13,8 @@ const kafka = new Kafka({
 });
 
 export const TOPICS = {
-  ORDER_EVENTS: "order.events",
+  ORDER_EVENTS:  "order.events",
+  RETURN_EVENTS: "return.events",
 } as const;
 
 let producer: Producer | null = null;

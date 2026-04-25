@@ -61,6 +61,11 @@ export default function AdminProducts() {
   const [submitting, setSubmitting] = useState(false);
   const [feedback,   setFeedback]   = useState<{ kind: "success" | "error"; msg: string } | null>(null);
 
+  // Pagination
+  const [page,           setPage]           = useState(1);
+  const [toast,          setToast]          = useState<{ msg: string; ok: boolean } | null>(null);
+  const [busyId,         setBusyId]         = useState<string | null>(null);
+
   // Filter state
   const [filterStatus,   setFilterStatus]   = useState("");
   const [filterCategory, setFilterCategory] = useState("");
@@ -86,6 +91,29 @@ export default function AdminProducts() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const PAGE_SIZE = 15;
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  async function handleRowStatusChange(productId: string, status: "active" | "suspended") {
+    setBusyId(`${productId}-${status}`);
+    try {
+      const result = await updateProductStatus([productId], status);
+      showToast(result.message);
+      setProducts((prev) => prev.map((p) => p.id === productId
+        ? { ...p, status, statusCode: status }
+        : p
+      ));
+    } catch (err) {
+      showToast(extractApiError(err), false);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   // ── Selection helpers ────────────────────────────────────────────────────────
 
@@ -139,6 +167,11 @@ export default function AdminProducts() {
   const allVisibleSelected =
     filtered.length > 0 && filtered.every((p) => selected.has(p.id));
 
+  const PAGE_SIZE_CONST = 15;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE_CONST));
+  const safePage   = Math.min(page, totalPages);
+  const pageRows   = filtered.slice((safePage - 1) * PAGE_SIZE_CONST, safePage * PAGE_SIZE_CONST);
+
   if (!user || user.type !== "admin") {
     return (
       <div className="card cardPad" style={{ textAlign: "center", padding: 40 }}>
@@ -151,6 +184,18 @@ export default function AdminProducts() {
 
   return (
     <div className="col" style={{ gap: 16 }}>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: "fixed", top: 20, right: 20, zIndex: 9999,
+          padding: "12px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14,
+          background: toast.ok ? "rgba(34,197,94,0.92)" : "rgba(239,68,68,0.92)",
+          color: "#fff", boxShadow: "0 4px 16px rgba(0,0,0,.4)",
+        }}>
+          {toast.msg}
+        </div>
+      )}
 
       {/* Page header */}
       <div className="card cardPad">
@@ -259,10 +304,11 @@ export default function AdminProducts() {
                     <th>Qty</th>
                     <th>Status</th>
                     <th>Listed</th>
+                    <th style={{ textAlign: "center" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((product) => {
+                  {pageRows.map((product) => {
                     const isSelected = selected.has(product.id);
                     return (
                       <tr
@@ -303,11 +349,81 @@ export default function AdminProducts() {
                         <td style={{ textAlign: "center" }}>{product.quantity}</td>
                         <td><StatusBadge status={product.status} /></td>
                         <td style={{ fontSize: 12, color: "var(--muted)" }}>{fmtDate(product.createdAt)}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: "flex", gap: 5, justifyContent: "center" }}>
+                            <button
+                              className="btn"
+                              title="Set product active"
+                              disabled={product.status === "active" || !!busyId}
+                              onClick={() => handleRowStatusChange(product.id, "active")}
+                              style={{
+                                padding: "4px 10px", fontSize: 11, fontWeight: 700,
+                                background: "rgba(34,197,94,0.13)", color: "#4ade80",
+                                borderColor: "rgba(34,197,94,0.3)",
+                                opacity: product.status === "active" || !!busyId ? 0.35 : 1,
+                              }}
+                            >
+                              {busyId === `${product.id}-active` ? "…" : "Activate"}
+                            </button>
+                            <button
+                              className="btn"
+                              title="Suspend product"
+                              disabled={product.status === "suspended" || !!busyId}
+                              onClick={() => handleRowStatusChange(product.id, "suspended")}
+                              style={{
+                                padding: "4px 10px", fontSize: 11, fontWeight: 700,
+                                background: "rgba(251,191,36,0.13)", color: "#fbbf24",
+                                borderColor: "rgba(251,191,36,0.3)",
+                                opacity: product.status === "suspended" || !!busyId ? 0.35 : 1,
+                              }}
+                            >
+                              {busyId === `${product.id}-suspended` ? "…" : "Suspend"}
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10, marginTop: 16 }}>
+                <button
+                  className="btn"
+                  style={{ padding: "8px 20px", fontSize: 16, opacity: safePage <= 1 ? 0.3 : 1 }}
+                  disabled={safePage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >←</button>
+                <div style={{ display: "flex", gap: 5 }}>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .slice(Math.max(0, safePage - 3), Math.min(totalPages, safePage + 2))
+                    .map((p) => (
+                    <button
+                      key={p} className="btn"
+                      style={{
+                        padding: "6px 12px", fontSize: 13, minWidth: 38,
+                        fontWeight: p === safePage ? 800 : 500,
+                        background: p === safePage ? "linear-gradient(135deg,rgba(124,92,255,0.5),rgba(124,92,255,0.25))" : "rgba(255,255,255,0.05)",
+                        borderColor: p === safePage ? "rgba(124,92,255,0.5)" : "rgba(255,255,255,0.1)",
+                        color: p === safePage ? "#c4b5fd" : "rgba(255,255,255,0.6)",
+                      }}
+                      onClick={() => setPage(p)}
+                    >{p}</button>
+                  ))}
+                </div>
+                <button
+                  className="btn"
+                  style={{ padding: "8px 20px", fontSize: 16, opacity: safePage >= totalPages ? 0.3 : 1 }}
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >→</button>
+              </div>
+            )}
+            <div className="muted" style={{ fontSize: 12, textAlign: "center", marginTop: 4 }}>
+              Showing {pageRows.length} of {filtered.length} products · Page {safePage} of {totalPages}
             </div>
 
             {/* Bulk actions toolbar */}

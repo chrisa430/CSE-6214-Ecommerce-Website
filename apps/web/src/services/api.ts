@@ -209,7 +209,7 @@ export interface PendingProduct {
 }
 
 export async function fetchOpenAccounts(): Promise<OpenAccount[]> {
-  const { data } = await adminApi.get<OpenAccount[]>("/accounts/open");
+  const { data } = await adminApi.get<OpenAccount[]>("/accounts");
   return data;
 }
 
@@ -707,5 +707,222 @@ export async function getRssAdminSummary(): Promise<{ summary: RssAdminSummaryRo
 
 export async function getRssAdminSubscribers(): Promise<RssSubscriberRow[]> {
   const { data } = await adminApi.get<RssSubscriberRow[]>("/rss/admin/subscribers");
+  return data;
+}
+
+// ── Admin account status (activate / suspend / close) ─────────────────────────
+
+export async function updateAccountStatus(
+  accountIds: string[],
+  status: "active" | "suspended" | "closed"
+): Promise<{ message: string; count: number }> {
+  const { data } = await adminApi.post<{ message: string; count: number }>(
+    "/accounts/status",
+    { accountIds, status }
+  );
+  return data;
+}
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+
+export interface AuditLogRow {
+  id:             string;
+  action:         string;
+  detail:         string | null;
+  occurredAt:     string;
+  actorEmail:     string;
+  actorFirstName: string;
+  actorLastName:  string;
+}
+
+export async function getAuditLogs(opts: {
+  limit?:  number;
+  offset?: number;
+  action?: string;
+}): Promise<{ rows: AuditLogRow[]; total: number }> {
+  const params: Record<string, string> = {};
+  if (opts.limit  !== undefined) params["limit"]  = String(opts.limit);
+  if (opts.offset !== undefined) params["offset"] = String(opts.offset);
+  if (opts.action)               params["action"] = opts.action;
+  const { data } = await adminApi.get<{ rows: AuditLogRow[]; total: number }>(
+    "/audit-logs", { params }
+  );
+  return data;
+}
+
+// ── Dashboard stats ──────────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  accounts: { total: number; pending: number };
+  products: { total: number; pending: number };
+  returns:  { active: number };
+  audit:    { total: number };
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const { data } = await adminApi.get<DashboardStats>("/stats");
+  return data;
+}
+
+// ── Admin returns ─────────────────────────────────────────────────────────────
+
+export interface AdminReturn {
+  id:          string;
+  orderId:     string;
+  productId:   string;
+  productName: string;
+  buyerId:     string;
+  sellerId:    string;
+  buyerName:   string;
+  sellerName:  string;
+  reason:      string | null;
+  status:      string;
+  createdAt:   string;
+  updatedAt:   string;
+}
+
+export async function getAdminReturns(): Promise<AdminReturn[]> {
+  const { data } = await adminApi.get<AdminReturn[]>("/returns");
+  return data;
+}
+
+// ── Buyer Profile — addresses + payment methods ───────────────────────────────
+
+export interface AddressRecord {
+  id?:          string;
+  addressType:  "billing" | "shipping";
+  street1:      string;
+  street2?:     string;
+  city:         string;
+  state:        string;  // abbreviation
+  stateName?:   string;
+  zipcode:      string;
+}
+
+export interface PaymentMethod {
+  id:          string;
+  type:        string;
+  nickname?:   string;
+  cardNumber:  string;   // last 4 digits
+  expMonth:    number;
+  expYear:     number;
+}
+
+export interface StateOption { id: string; name: string; abbreviation: string; }
+
+function accountId(): string {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) {
+      const u = JSON.parse(raw) as { id: string };
+      return u.id ?? "";
+    }
+    return "";
+  } catch { return ""; }
+}
+
+export async function updateMyProfile(firstName: string, lastName: string): Promise<void> {
+  await accountApi.patch("/my/profile", { firstName, lastName });
+}
+
+export async function getMyAddresses(): Promise<AddressRecord[]> {
+  const id = accountId();
+  const { data } = await accountApi.get<AddressRecord[]>(`/${id}/addresses`);
+  return data;
+}
+
+export async function saveMyAddress(addr: AddressRecord): Promise<void> {
+  const id = accountId();
+  await accountApi.put(`/${id}/addresses`, addr);
+}
+
+export async function getMyPaymentMethods(): Promise<PaymentMethod[]> {
+  const id = accountId();
+  const { data } = await accountApi.get<PaymentMethod[]>(`/${id}/payment-methods`);
+  return data;
+}
+
+export async function addPaymentMethod(pm: {
+  type: string; nickname?: string;
+  cardNumber: string; expMonth: number; expYear: number;
+}): Promise<{ id: string }> {
+  const id = accountId();
+  const { data } = await accountApi.post<{ id: string }>(`/${id}/payment-methods`, pm);
+  return data;
+}
+
+export async function updatePaymentMethod(
+  pmId: string,
+  pm: { type?: string; nickname?: string; cardNumber?: string; expMonth?: number; expYear?: number }
+): Promise<void> {
+  const id = accountId();
+  await accountApi.put(`/${id}/payment-methods/${pmId}`, pm);
+}
+
+export async function deletePaymentMethod(pmId: string): Promise<void> {
+  const id = accountId();
+  await accountApi.delete(`/${id}/payment-methods/${pmId}`);
+}
+
+export async function getStates(): Promise<StateOption[]> {
+  try {
+    const { data } = await accountApi.get<StateOption[]>("/states");
+    return data;
+  } catch {
+    // Fallback: return the 50 US states hardcoded so the dropdown always works
+    return [
+      {id:"1",name:"Alabama",abbreviation:"AL"},{id:"2",name:"Alaska",abbreviation:"AK"},
+      {id:"3",name:"Arizona",abbreviation:"AZ"},{id:"4",name:"Arkansas",abbreviation:"AR"},
+      {id:"5",name:"California",abbreviation:"CA"},{id:"6",name:"Colorado",abbreviation:"CO"},
+      {id:"7",name:"Connecticut",abbreviation:"CT"},{id:"8",name:"Delaware",abbreviation:"DE"},
+      {id:"9",name:"Florida",abbreviation:"FL"},{id:"10",name:"Georgia",abbreviation:"GA"},
+      {id:"11",name:"Hawaii",abbreviation:"HI"},{id:"12",name:"Idaho",abbreviation:"ID"},
+      {id:"13",name:"Illinois",abbreviation:"IL"},{id:"14",name:"Indiana",abbreviation:"IN"},
+      {id:"15",name:"Iowa",abbreviation:"IA"},{id:"16",name:"Kansas",abbreviation:"KS"},
+      {id:"17",name:"Kentucky",abbreviation:"KY"},{id:"18",name:"Louisiana",abbreviation:"LA"},
+      {id:"19",name:"Maine",abbreviation:"ME"},{id:"20",name:"Maryland",abbreviation:"MD"},
+      {id:"21",name:"Massachusetts",abbreviation:"MA"},{id:"22",name:"Michigan",abbreviation:"MI"},
+      {id:"23",name:"Minnesota",abbreviation:"MN"},{id:"24",name:"Mississippi",abbreviation:"MS"},
+      {id:"25",name:"Missouri",abbreviation:"MO"},{id:"26",name:"Montana",abbreviation:"MT"},
+      {id:"27",name:"Nebraska",abbreviation:"NE"},{id:"28",name:"Nevada",abbreviation:"NV"},
+      {id:"29",name:"New Hampshire",abbreviation:"NH"},{id:"30",name:"New Jersey",abbreviation:"NJ"},
+      {id:"31",name:"New Mexico",abbreviation:"NM"},{id:"32",name:"New York",abbreviation:"NY"},
+      {id:"33",name:"North Carolina",abbreviation:"NC"},{id:"34",name:"North Dakota",abbreviation:"ND"},
+      {id:"35",name:"Ohio",abbreviation:"OH"},{id:"36",name:"Oklahoma",abbreviation:"OK"},
+      {id:"37",name:"Oregon",abbreviation:"OR"},{id:"38",name:"Pennsylvania",abbreviation:"PA"},
+      {id:"39",name:"Rhode Island",abbreviation:"RI"},{id:"40",name:"South Carolina",abbreviation:"SC"},
+      {id:"41",name:"South Dakota",abbreviation:"SD"},{id:"42",name:"Tennessee",abbreviation:"TN"},
+      {id:"43",name:"Texas",abbreviation:"TX"},{id:"44",name:"Utah",abbreviation:"UT"},
+      {id:"45",name:"Vermont",abbreviation:"VT"},{id:"46",name:"Virginia",abbreviation:"VA"},
+      {id:"47",name:"Washington",abbreviation:"WA"},{id:"48",name:"West Virginia",abbreviation:"WV"},
+      {id:"49",name:"Wisconsin",abbreviation:"WI"},{id:"50",name:"Wyoming",abbreviation:"WY"},
+    ];
+  }
+}
+
+// ── Password management ───────────────────────────────────────────────────────
+
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const { data } = await accountApi.post<{ message: string }>("/forgot-password", { email });
+  return data;
+}
+
+export async function resetPassword(
+  token: string,
+  newPassword: string
+): Promise<{ message: string }> {
+  const { data } = await accountApi.post<{ message: string }>("/reset-password", {
+    token, newPassword,
+  });
+  return data;
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<{ message: string }> {
+  const { data } = await accountApi.post<{ message: string }>("/my/change-password", {
+    currentPassword, newPassword,
+  });
   return data;
 }

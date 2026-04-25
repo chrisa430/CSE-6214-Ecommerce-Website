@@ -50,6 +50,17 @@ app.use("/accounts/:id/addresses",        addressRoutes);
 app.use("/accounts/:id/payment-methods",  paymentMethodRoutes);
 app.use("/accounts/:id/profile-picture",  profilePictureRoutes);
 
+// ── GET /states — public, no auth needed ────────────────────────────────────
+app.get("/states", async (_req, res) => {
+  const { getPool } = await import("./db/pool");
+  try {
+    const r = await getPool().query("SELECT id, name, abbrev AS abbreviation FROM state ORDER BY name");
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error("Unhandled error", err);

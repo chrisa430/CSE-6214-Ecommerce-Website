@@ -143,12 +143,15 @@ export default function Login() {
                   {loading ? "Signing in…" : "Sign in"}
                 </button>
 
-                <span className="muted" style={{ fontSize: 13 }}>
-                No account?{" "}
-                  <Link to="/register" style={{ color: "var(--accent)", fontWeight: 600 }}>
-                  Register
-                </Link>
-              </span>
+                <div className="col" style={{ gap: 6, alignItems: "flex-end" }}>
+                  <span className="muted" style={{ fontSize: 13 }}>
+                    No account?{" "}
+                    <Link to="/register" style={{ color: "var(--accent)", fontWeight: 600 }}>Register</Link>
+                  </span>
+                  <Link to="/forgot-password" style={{ fontSize: 13, color: "var(--muted)", textDecoration: "none" }}>
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
             </form>
 

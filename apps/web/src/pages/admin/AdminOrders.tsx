@@ -88,6 +88,8 @@ export default function AdminOrders() {
   const [ordersFeedback, setOrdersFeedback] = useState<{ kind: "error"; msg: string } | null>(null);
   const [searchBuyer,    setSearchBuyer]   = useState("");
   const [filterStatus,   setFilterStatus]  = useState("");
+  const [page,           setPage]          = useState(1);
+  const ORDERS_PAGE_SIZE = 15;
 
   // Admin guard
   useEffect(() => {
@@ -146,6 +148,7 @@ export default function AdminOrders() {
   }
 
   // ── Filter orders ────────────────────────────────────────────────────────────
+  // Reset page on filter change
   const filtered = orders.filter((o) => {
     if (filterStatus && o.status !== filterStatus) return false;
     if (searchBuyer) {
@@ -154,6 +157,10 @@ export default function AdminOrders() {
     }
     return true;
   });
+
+  const totalPages   = Math.max(1, Math.ceil(filtered.length / ORDERS_PAGE_SIZE));
+  const safePage     = Math.min(page, totalPages);
+  const pageRows     = filtered.slice((safePage - 1) * ORDERS_PAGE_SIZE, safePage * ORDERS_PAGE_SIZE);
 
   if (!user || user.type !== "admin") {
     return (
@@ -311,6 +318,7 @@ export default function AdminOrders() {
             {orders.length === 0 ? "No orders in the system yet." : "No orders match the selected filters."}
           </p>
         ) : (
+          <>
           <div style={{ overflowX: "auto" }}>
             <table className="table" style={{ minWidth: 860 }}>
               <thead>
@@ -324,7 +332,7 @@ export default function AdminOrders() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((order) => (
+                {pageRows.map((order) => (
                   <tr key={order.id}>
                     <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--muted)" }}>
                       {order.id.slice(0, 8).toUpperCase()}
@@ -349,6 +357,39 @@ export default function AdminOrders() {
               </tbody>
             </table>
           </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10, marginTop: 20 }}>
+                <button className="btn"
+                  style={{ padding: "8px 20px", fontSize: 16, opacity: safePage <= 1 ? 0.3 : 1 }}
+                  disabled={safePage <= 1}
+                  onClick={() => setPage((p) => p - 1)}>←</button>
+                <div style={{ display: "flex", gap: 5 }}>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .slice(Math.max(0, safePage - 3), Math.min(totalPages, safePage + 2))
+                    .map((p) => (
+                    <button key={p} className="btn"
+                      style={{
+                        padding: "6px 12px", fontSize: 13, minWidth: 38,
+                        fontWeight: p === safePage ? 800 : 500,
+                        background: p === safePage ? "linear-gradient(135deg,rgba(124,92,255,0.5),rgba(124,92,255,0.25))" : "rgba(255,255,255,0.05)",
+                        borderColor: p === safePage ? "rgba(124,92,255,0.5)" : "rgba(255,255,255,0.1)",
+                        color: p === safePage ? "#c4b5fd" : "rgba(255,255,255,0.6)",
+                      }}
+                      onClick={() => setPage(p)}>{p}</button>
+                  ))}
+                </div>
+                <button className="btn"
+                  style={{ padding: "8px 20px", fontSize: 16, opacity: safePage >= totalPages ? 0.3 : 1 }}
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}>→</button>
+              </div>
+            )}
+            <div className="muted" style={{ fontSize: 12, textAlign: "center", marginTop: 6 }}>
+              Showing {pageRows.length} of {filtered.length} orders · Page {safePage} of {totalPages}
+            </div>
+          </>
         )}
       </div>
     </div>

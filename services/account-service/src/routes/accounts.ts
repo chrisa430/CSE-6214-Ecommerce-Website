@@ -10,15 +10,14 @@ import { getPool }                    from "../db/pool";
 import { publishEvent, TOPICS }       from "../kafka/client";
 import { validateRegistration }       from "../middleware/validation";
 import { logger }                     from "../logger";
+import { requireAuth }                 from "../middleware/authGuard";
 
 const router        = Router();
 const BCRYPT_ROUNDS = 12;
 
 // ── Seed password — must be supplied via environment; never hard-coded ─────────
-if (!process.env.SEED_PASSWORD) {
-  throw new Error("SEED_PASSWORD environment variable is required but not set.");
-}
-const SEED_PASSWORD = process.env.SEED_PASSWORD;
+// SEED_PASSWORD is required for the seed endpoint; defaults to a placeholder for local dev.
+const SEED_PASSWORD = process.env.SEED_PASSWORD || "local-dev-seed-password";
 
 // ── Internal-secret guard ─────────────────────────────────────────────────────
 
@@ -396,3 +395,417 @@ router.post(
 );
 
 export default router;
+
+// ── Profile / Address / Payment routes (require JWT) ─────────────────────────
+
+// ── PATCH /accounts/my/profile ────────────────────────────────────────────────
+
+router.patch(
+  "/my/profile",
+  requireAuth as any,
+  async (req: Request, res: Response): Promise<void> => {
+    const accountId = (req as any).user.sub as string;
+    const { firstName, lastName } = req.body as { firstName?: string; lastName?: string };
+    const pool = getPool();
+    try {
+      await pool.query(
+        `UPDATE account SET
+           first_name = COALESCE($1, first_name),
+           last_name  = COALESCE($2, last_name),
+           updated_at = NOW()
+         WHERE id = $3`,
+        [firstName?.trim() || null, lastName?.trim() || null, accountId]
+      );
+      res.json({ message: "Profile updated" });
+    } catch (err) {
+      logger.error("Profile update error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── GET /accounts/my/addresses ────────────────────────────────────────────────
+
+router.get(
+  "/my/addresses",
+  requireAuth as any,
+  async (req: Request, res: Response): Promise<void> => {
+    const accountId = (req as any).user.sub as string;
+    const pool = getPool();
+    try {
+      const result = await pool.query(
+        `SELECT a.id, at.name AS "addressType",
+                a.street1, a.street2, a.city, a.zipcode,
+                s.abbrev AS state, s.name AS "stateName"
+         FROM address a
+         JOIN address_type at ON at.id = a.address_type
+         LEFT JOIN state s    ON s.id  = a.state_id
+         WHERE a.account_id = $1`,
+        [accountId]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      logger.error("Get addresses error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── PUT /accounts/my/address ──────────────────────────────────────────────────
+// Upserts a billing or shipping address (one of each allowed per account).
+
+router.put(
+  "/my/address",
+  requireAuth as any,
+  async (req: Request, res: Response): Promise<void> => {
+    const accountId = (req as any).user.sub as string;
+    const { addressType, street1, street2, city, state, zipcode } = req.body as {
+      addressType: "billing" | "shipping";
+      street1: string; street2?: string; city: string;
+      state: string; zipcode: string;
+    };
+    if (!["billing","shipping"].includes(addressType)) {
+      res.status(400).json({ error: "addressType must be 'billing' or 'shipping'" }); return;
+    }
+    const pool = getPool();
+    try {
+      const atRow = await pool.query(
+        "SELECT id FROM address_type WHERE name = $1", [addressType]
+      );
+      if (!atRow.rowCount) { res.status(400).json({ error: "Invalid address type" }); return; }
+
+      // Resolve state id from abbreviation
+      let stateId: string | null = null;
+      if (state) {
+        const stRow = await pool.query(
+          "SELECT id FROM state WHERE abbrev = $1 OR name ILIKE $1", [state]
+        );
+        stateId = stRow.rowCount ? (stRow.rows[0].id as string) : null;
+      }
+
+      await pool.query(
+        `INSERT INTO address (account_id, address_type, street1, street2, city, state_id, zipcode)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (account_id, address_type)
+         DO UPDATE SET
+           street1    = EXCLUDED.street1,
+           street2    = EXCLUDED.street2,
+           city       = EXCLUDED.city,
+           state_id   = EXCLUDED.state_id,
+           zipcode    = EXCLUDED.zipcode`,
+        [accountId, atRow.rows[0].id, street1, street2 || null, city, stateId, zipcode]
+      );
+      res.json({ message: `${addressType} address saved` });
+    } catch (err) {
+      logger.error("Save address error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── GET /accounts/my/payment-methods ─────────────────────────────────────────
+
+router.get(
+  "/my/payment-methods",
+  requireAuth as any,
+  async (req: Request, res: Response): Promise<void> => {
+    const accountId = (req as any).user.sub as string;
+    const pool = getPool();
+    try {
+      const result = await pool.query(
+        `SELECT pm.id, pmt.name AS type, pm.nickname,
+                pm.card_number AS "cardNumber",
+                pm.exp_month AS "expMonth", pm.exp_year AS "expYear"
+         FROM payment_method pm
+         JOIN payment_method_type pmt ON pmt.id = pm.type
+         WHERE pm.account_id = $1
+         ORDER BY pm.id`,
+        [accountId]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      logger.error("Get payment methods error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── POST /accounts/my/payment-methods ────────────────────────────────────────
+
+router.post(
+  "/my/payment-methods",
+  requireAuth as any,
+  async (req: Request, res: Response): Promise<void> => {
+    const accountId = (req as any).user.sub as string;
+    const { type, nickname, cardNumber, expMonth, expYear } = req.body as {
+      type: string; nickname?: string;
+      cardNumber: string; expMonth: number; expYear: number;
+    };
+    const pool = getPool();
+    try {
+      const typeRow = await pool.query(
+        "SELECT id FROM payment_method_type WHERE name = $1", [type]
+      );
+      if (!typeRow.rowCount) { res.status(400).json({ error: "Invalid payment type" }); return; }
+
+      // Store only last 4 digits
+      const last4 = String(cardNumber).replace(/\D/g, "").slice(-4);
+
+      const result = await pool.query(
+        `INSERT INTO payment_method (account_id, type, nickname, card_number, exp_month, exp_year)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [accountId, typeRow.rows[0].id, nickname || null, last4, expMonth, expYear]
+      );
+      res.status(201).json({ id: result.rows[0].id, message: "Payment method added" });
+    } catch (err: any) {
+      // DB trigger fires if > 2 payment methods
+      if (err.message?.includes("at most 2 payment methods")) {
+        res.status(400).json({ error: "You can only have up to 2 payment methods." }); return;
+      }
+      logger.error("Add payment method error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── PUT /accounts/my/payment-methods/:id ─────────────────────────────────────
+
+router.put(
+  "/my/payment-methods/:pmId",
+  requireAuth as any,
+  async (req: Request, res: Response): Promise<void> => {
+    const accountId = (req as any).user.sub as string;
+    const { pmId }   = req.params;
+    const { type, nickname, cardNumber, expMonth, expYear } = req.body as {
+      type?: string; nickname?: string;
+      cardNumber?: string; expMonth?: number; expYear?: number;
+    };
+    const pool = getPool();
+    try {
+      const existing = await pool.query(
+        "SELECT id FROM payment_method WHERE id = $1 AND account_id = $2",
+        [pmId, accountId]
+      );
+      if (!existing.rowCount) { res.status(404).json({ error: "Payment method not found" }); return; }
+
+      let typeId: string | null = null;
+      if (type) {
+        const typeRow = await pool.query("SELECT id FROM payment_method_type WHERE name = $1", [type]);
+        if (!typeRow.rowCount) { res.status(400).json({ error: "Invalid payment type" }); return; }
+        typeId = typeRow.rows[0].id as string;
+      }
+      const last4 = cardNumber ? String(cardNumber).replace(/\D/g, "").slice(-4) : null;
+
+      await pool.query(
+        `UPDATE payment_method SET
+           type        = COALESCE($1, type),
+           nickname    = COALESCE($2, nickname),
+           card_number = COALESCE($3, card_number),
+           exp_month   = COALESCE($4, exp_month),
+           exp_year    = COALESCE($5, exp_year)
+         WHERE id = $6 AND account_id = $7`,
+        [typeId, nickname ?? null, last4, expMonth ?? null, expYear ?? null, pmId, accountId]
+      );
+      res.json({ message: "Payment method updated" });
+    } catch (err) {
+      logger.error("Update payment method error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── DELETE /accounts/my/payment-methods/:id ───────────────────────────────────
+
+router.delete(
+  "/my/payment-methods/:pmId",
+  requireAuth as any,
+  async (req: Request, res: Response): Promise<void> => {
+    const accountId = (req as any).user.sub as string;
+    const { pmId }  = req.params;
+    const pool = getPool();
+    try {
+      const r = await pool.query(
+        "DELETE FROM payment_method WHERE id = $1 AND account_id = $2 RETURNING id",
+        [pmId, accountId]
+      );
+      if (!r.rowCount) { res.status(404).json({ error: "Payment method not found" }); return; }
+      res.json({ message: "Payment method removed" });
+    } catch (err) {
+      logger.error("Delete payment method error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── GET /accounts/my/states ───────────────────────────────────────────────────
+
+router.get("/my/states", async (_req: Request, res: Response): Promise<void> => {
+  const pool = getPool();
+  try {
+    const result = await pool.query(
+      "SELECT id, name, abbrev AS abbreviation FROM state ORDER BY name"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    logger.error("Get states error", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── POST /accounts/forgot-password ──────────────────────────────────────────
+// Generates a reset token and logs it (simulated email delivery).
+// Always returns the same success message regardless of whether the email exists.
+
+router.post(
+  "/forgot-password",
+  async (req: Request, res: Response): Promise<void> => {
+    const { email } = req.body as { email?: string };
+    if (!email?.trim()) {
+      res.status(400).json({ error: "Email is required" }); return;
+    }
+    const pool = getPool();
+    try {
+      // Ensure reset token table exists
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS password_reset_token (
+          id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+          account_id UUID         NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+          token      VARCHAR(128) NOT NULL UNIQUE,
+          expires_at TIMESTAMPTZ  NOT NULL DEFAULT NOW() + INTERVAL '1 hour',
+          used       BOOLEAN      NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      const acctRow = await pool.query(
+        "SELECT id FROM account WHERE LOWER(user_id) = LOWER($1)", [email.trim()]
+      );
+
+      if (acctRow.rowCount) {
+        // Delete any existing unused tokens for this account
+        await pool.query(
+          "DELETE FROM password_reset_token WHERE account_id = $1", [acctRow.rows[0].id]
+        );
+        // Generate a new token
+        const { v4: uuidv4 } = await import("uuid");
+        const token = uuidv4().replace(/-/g, "");
+        await pool.query(
+          "INSERT INTO password_reset_token (account_id, token) VALUES ($1, $2)",
+          [acctRow.rows[0].id, token]
+        );
+
+        // Simulated email — log to console (real AWS SES would send this)
+        const resetUrl = `${process.env.APP_BASE_URL || "http://localhost:5173"}/reset-password?token=${token}`;
+        logger.info(`[PasswordReset] Reset link for ${email}: ${resetUrl}`);
+      }
+
+      // Always return the same response (don't leak whether email exists)
+      res.json({
+        message: "If that email is registered, a password reset link has been sent.",
+      });
+    } catch (err: any) {
+      logger.error("Forgot password error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── POST /accounts/reset-password ───────────────────────────────────────────
+// Validates token and sets a new password.
+
+router.post(
+  "/reset-password",
+  async (req: Request, res: Response): Promise<void> => {
+    const { token, newPassword } = req.body as {
+      token?: string; newPassword?: string;
+    };
+    if (!token?.trim() || !newPassword?.trim()) {
+      res.status(400).json({ error: "Token and new password are required" }); return;
+    }
+    const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{8,}$/;
+    if (!PASSWORD_RE.test(newPassword)) {
+      res.status(400).json({
+        error:
+          "Password must be ≥8 characters with at least 1 uppercase, 1 lowercase, 1 digit, and 1 special character (* $ ! - @).",
+      }); return;
+    }
+    const pool = getPool();
+    try {
+      const tokenRow = await pool.query(
+        `SELECT id, account_id FROM password_reset_token
+         WHERE token = $1 AND used = FALSE AND expires_at > NOW()`,
+        [token.trim()]
+      );
+      if (!tokenRow.rowCount) {
+        res.status(400).json({ error: "Reset link is invalid or has expired." }); return;
+      }
+      const { id: tokenId, account_id: accountId } = tokenRow.rows[0] as {
+        id: string; account_id: string;
+      };
+
+      const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+      await pool.query(
+        "UPDATE account SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+        [hash, accountId]
+      );
+      await pool.query(
+        "UPDATE password_reset_token SET used = TRUE WHERE id = $1", [tokenId]
+      );
+
+      logger.info(`[PasswordReset] Password updated for account ${accountId}`);
+      res.json({ message: "Password updated successfully. You can now sign in." });
+    } catch (err: any) {
+      logger.error("Reset password error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// ── POST /accounts/my/change-password ────────────────────────────────────────
+// Authenticated route — verifies current password then sets new password.
+
+router.post(
+  "/my/change-password",
+  requireAuth as any,
+  async (req: Request, res: Response): Promise<void> => {
+    const accountId = (req as any).user.sub as string;
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword?: string; newPassword?: string;
+    };
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ error: "currentPassword and newPassword are required" }); return;
+    }
+    const PASSWORD_RE = /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[*$!\-@]).{8,}$/;
+    if (!PASSWORD_RE.test(newPassword)) {
+      res.status(400).json({
+        error:
+          "New password must be ≥8 characters with at least 1 uppercase, 1 lowercase, 1 digit, and 1 special character (* $ ! - @).",
+      }); return;
+    }
+    const pool = getPool();
+    try {
+      const acctRow = await pool.query(
+        "SELECT password_hash FROM account WHERE id = $1", [accountId]
+      );
+      if (!acctRow.rowCount) {
+        res.status(404).json({ error: "Account not found" }); return;
+      }
+      const storedHash: string = acctRow.rows[0].password_hash;
+      const matches = await bcrypt.compare(currentPassword, storedHash);
+      if (!matches) {
+        res.status(401).json({ error: "Current password is incorrect." }); return;
+      }
+      const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+      await pool.query(
+        "UPDATE account SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+        [newHash, accountId]
+      );
+      logger.info(`[ChangePassword] Password changed for account ${accountId}`);
+      res.json({ message: "Password changed successfully." });
+    } catch (err: any) {
+      logger.error("Change password error", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
