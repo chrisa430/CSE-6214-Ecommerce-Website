@@ -304,6 +304,7 @@ services:
       APP_BASE_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
       OUTBOX_POLL_MS: 30000
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
     ports:
       - "3003:3003"
     depends_on:

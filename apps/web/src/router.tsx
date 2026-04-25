@@ -9,6 +9,7 @@ import AdminSubpage  from "./pages/admin/AdminSubpage";
 import AdminProducts      from "./pages/admin/AdminProducts";
 import AdminProductDetail from "./pages/admin/AdminProductDetail";
 import AdminOrders        from "./pages/admin/AdminOrders";
+import AdminRSSFeeds       from "./pages/admin/AdminRSSFeeds";
 
 import BuyerLayout   from "./layouts/BuyerLayout";
 import BuyerHome     from "./pages/buyer/BuyerHome";
@@ -28,6 +29,7 @@ import InventoryManagement from "./pages/seller/InventoryManagement";
 import SellerProfile from "./pages/seller/SellerProfile";
 import SellerReturns from "./pages/seller/SellerReturns";
 import SellerTrades  from "./pages/seller/SellerTrades";
+import SellerRSSFeeds from "./pages/seller/SellerRSSFeeds";
 
 export const router = createBrowserRouter([
   { path: "/",        element: <Navigate to="/login" replace /> },
@@ -43,6 +45,7 @@ export const router = createBrowserRouter([
       { path: "products",         element: <AdminProducts /> },
       { path: "products/:id",     element: <AdminProductDetail /> },
       { path: "orders",            element: <AdminOrders /> },
+      { path: "rss-feeds",         element: <AdminRSSFeeds /> },
     ],
   },
 
@@ -72,6 +75,7 @@ export const router = createBrowserRouter([
       { path: "profile",   element: <SellerProfile /> },
       { path: "returns",   element: <SellerReturns /> },
       { path: "trades",    element: <SellerTrades /> },
+      { path: "rss-feeds",  element: <SellerRSSFeeds /> },
     ],
   },
 ]);

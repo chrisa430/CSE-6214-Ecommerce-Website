@@ -46,6 +46,7 @@ export default function SellerLayout() {
             <NavItem to="/seller/inventory">Inventory</NavItem>
             <NavItem to="/seller/returns">Returns</NavItem>
             <NavItem to="/seller/trades">Trades</NavItem>
+            <NavItem to="/seller/rss-feeds">📡 RSS Feeds</NavItem>
           </nav>
 
           <div style={{ flex: 1 }} />

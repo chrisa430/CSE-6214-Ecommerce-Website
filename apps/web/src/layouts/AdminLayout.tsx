@@ -43,6 +43,7 @@ export default function AdminLayout() {
             <NavItem to="/admin/subpage#approvals">Account Approvals</NavItem>
             <NavItem to="/admin/subpage#returns">Return Facilitation</NavItem>
             <NavItem to="/admin/subpage#audit">Audit Logs</NavItem>
+            <NavItem to="/admin/rss-feeds">📡 RSS Feeds</NavItem>
           </nav>
 
           <div style={{ flex: 1 }} />

@@ -604,3 +604,108 @@ export async function actionReturn(
   const { data } = await orderApi.put("/returns/action", { returnIds, action, notes });
   return data;
 }
+
+// ── RSS Feed Types ────────────────────────────────────────────────────────────
+
+export interface RssFeedType {
+  id:           string;
+  name:         string;
+  shortDesc:    string;
+  longDesc:     string;
+  // Present when fetched by an authenticated seller
+  subscribed?:  boolean;
+  emailAlerts?: boolean;
+}
+
+export interface RssSubscription {
+  id:           string;
+  feedType:     string;
+  feedLabel:    string;
+  emailAlerts:  boolean;
+  subscribedAt: string;
+}
+
+export interface RssFeedItemMetadata {
+  // product_activations
+  productId?:    string;
+  productName?:  string;
+  description?:  string;
+  quantity?:     number;
+  unitPrice?:    string;
+  // product_blocks
+  reason?:       string;
+  // product_sales
+  orderId?:      string;
+  buyerName?:    string;
+  productCost?:  string;
+  // account_blocks
+  accountStatus?: string;
+  accountEmail?:  string;
+  accountName?:   string;
+}
+
+export interface RssFeedItem {
+  id:          string;
+  feedType:    string;
+  feedLabel:   string;
+  title:       string;
+  description: string;
+  link:        string;
+  metadata?:   RssFeedItemMetadata;
+  occurredAt:  string;
+}
+
+export interface RssAdminSummaryRow {
+  feedType:        string;
+  label:           string;
+  itemCount:       number;
+  subscriberCount: number;
+}
+
+export interface RssSubscriberRow {
+  id:             string;
+  sellerId:       string;
+  feedType:       string;
+  feedLabel:      string;
+  emailAlerts:    boolean;
+  subscribedAt:   string;
+  sellerDisplay:  string;
+}
+
+// ── RSS API calls ─────────────────────────────────────────────────────────────
+
+export async function getRssFeedTypes(): Promise<RssFeedType[]> {
+  const { data } = await adminApi.get<RssFeedType[]>("/rss/feed-types");
+  return data;
+}
+
+export async function getMyRssSubscriptions(): Promise<RssSubscription[]> {
+  const { data } = await adminApi.get<RssSubscription[]>("/rss/subscriptions");
+  return data;
+}
+
+export async function subscribeRss(feedTypes: string[], emailAlerts = true): Promise<void> {
+  await adminApi.post("/rss/subscribe", { feedTypes, emailAlerts });
+}
+
+export async function unsubscribeRss(feedTypes: string[]): Promise<void> {
+  await adminApi.delete("/rss/unsubscribe", { data: { feedTypes } });
+}
+
+export async function getRssFeedItems(opts: { limit?: number; type?: string } = {}): Promise<RssFeedItem[]> {
+  const params: Record<string, string> = {};
+  if (opts.limit) params["limit"] = String(opts.limit);
+  if (opts.type)  params["type"]  = opts.type;
+  const { data } = await adminApi.get<RssFeedItem[]>("/rss/feeds", { params });
+  return data;
+}
+
+export async function getRssAdminSummary(): Promise<{ summary: RssAdminSummaryRow[]; recentItems: RssFeedItem[] }> {
+  const { data } = await adminApi.get<{ summary: RssAdminSummaryRow[]; recentItems: RssFeedItem[] }>("/rss/admin/summary");
+  return data;
+}
+
+export async function getRssAdminSubscribers(): Promise<RssSubscriberRow[]> {
+  const { data } = await adminApi.get<RssSubscriberRow[]>("/rss/admin/subscribers");
+  return data;
+}

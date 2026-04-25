@@ -13,6 +13,7 @@ import { requireRole } from "../middleware/requireRole";
 import { getInventoryPool } from "../db/inventoryPool";
 import { getAdminPool }    from "../db/adminPool";
 import { getAccountPool }  from "../db/accountPool";
+import { publishEvent, TOPICS } from "../kafka/client";
 
 const router = Router();
 
@@ -376,6 +377,23 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
             [cartId]
         );
 
+
+        // ── Publish ORDER_COMPLETED event for RSS sales feed ─────────────────
+        const completedItems = items.map((item: any) => ({
+          productId: item.productId,
+          name:      (item as any).name ?? item.productId,
+          quantity:  Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+        }));
+        publishEvent(TOPICS.ORDER_EVENTS, orderId, {
+          eventType:  "ORDER_COMPLETED",
+          orderId,
+          buyerId,
+          total,
+          items: completedItems,
+          occurredAt: new Date().toISOString(),
+        }).catch((err: unknown) => logger.warn("[Checkout] Kafka publish failed (non-fatal)", err));
+
         res.status(201).json({
             message: "Checkout completed",
             order: orderInsert.rows[0],
@@ -664,6 +682,30 @@ router.post(
             );
 
             const returnId = insertResult.rows[0].id as string;
+
+
+            // ── Publish RETURN_INITIATED event for RSS returns feed ───────────
+            // Resolve unit_price for this product to include in the RSS metadata
+            let productCost = 0;
+            try {
+              const priceRow = await (invPool as any).query(
+                "SELECT unit_price FROM product WHERE id = $1", [productId]
+              );
+              if (priceRow?.rowCount) productCost = Number(priceRow.rows[0].unit_price);
+            } catch { /* non-fatal */ }
+
+            publishEvent(TOPICS.RETURN_EVENTS, returnId, {
+              eventType:   "RETURN_INITIATED",
+              returnId,
+              orderId,
+              productId,
+              productName,
+              productCost,
+              sellerId,
+              buyerId,
+              reason:      reason ?? null,
+              occurredAt:  new Date().toISOString(),
+            }).catch((err: unknown) => logger.warn("[Return] Kafka publish failed (non-fatal)", err));
 
             // Send notifications (non-blocking — errors logged but don't fail the request)
             sendReturnNotifications({ buyerId, sellerId, productName, orderId, returnId })
