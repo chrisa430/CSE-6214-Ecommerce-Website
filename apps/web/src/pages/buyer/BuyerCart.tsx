@@ -9,17 +9,24 @@ export default function BuyerCart() {
 
   useEffect(() => {
     async function loadData() {
+      // Fetch cart items first — this is the critical path.
+      // A failure here shows the error banner; items stay empty.
       try {
-        const [cartItems, activeProducts] = await Promise.all([
-          getCart(),
-          getActiveProducts(),
-        ]);
-
+        const cartItems = await getCart();
         setItems(Array.isArray(cartItems) ? cartItems : []);
+      } catch (err) {
+        console.error("getCart failed:", err);
+        setError("Failed to load cart.");
+      }
+
+      // Fetch active products separately for name/image enrichment.
+      // This is non-critical: if the inventory service is slow or down,
+      // cart items still display with their stored name and a default image.
+      try {
+        const activeProducts = await getActiveProducts();
         setProducts(Array.isArray(activeProducts) ? activeProducts : []);
       } catch (err) {
-        console.error(err);
-        setError("Failed to load cart.");
+        console.error("getActiveProducts failed (non-fatal):", err);
       }
     }
 

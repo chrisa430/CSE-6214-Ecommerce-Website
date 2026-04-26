@@ -251,7 +251,9 @@ export interface CartItem {
 }
 
 export async function getCart(): Promise<CartItem[]> {
-  const { data } = await cartApi.get<CartItem[]>("/");
+  // Use "" so axios resolves to /api/cart (no trailing slash), cleanly matching
+  // the Vercel rewrite pattern /api/cart/:path*
+  const { data } = await cartApi.get<CartItem[]>("");
   return data;
 }
 
