@@ -1,23 +1,11 @@
-/**
- * @fileoverview BuyerHome — Browse Products with 3×4 pagination
- * @module pages/buyer/BuyerHome.tsx
- * @author Darrell Hobson
- * @Date 2026.04.24
- */
 import { useEffect, useState } from "react";
-import { useNavigate }          from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { addToCart, getActiveProducts, Product } from "../../services/api";
-import { useCompare }           from "../../context/CompareContext";
+import { useCompare } from "../../context/CompareContext";
 
-const TILES_PER_ROW = 4;
-const ROWS_PER_PAGE = 3;
-const PAGE_SIZE     = TILES_PER_ROW * ROWS_PER_PAGE; // 12
-
-const STATUS_COLOR: Record<string, string> = {
-  active:    "#22c55e",
-  suspended: "#ef4444",
-  open:      "#93c5fd",
-};
+const COLS       = 4;
+const ROWS       = 2;
+const PAGE_SIZE  = COLS * ROWS; // 8 products per page
 
 export default function BuyerHome() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -31,11 +19,22 @@ export default function BuyerHome() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    getActiveProducts()
-      .then((data) => setProducts(Array.isArray(data) ? data : []))
-      .catch(() => setError("Failed to load products."))
-      .finally(() => setLoading(false));
+    async function loadProducts() {
+      try {
+        const data = await getActiveProducts();
+        setProducts(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load products.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadProducts();
   }, []);
+
+  // Reset to page 1 whenever the search term changes
+  useEffect(() => { setPage(1); }, [search]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -47,7 +46,8 @@ export default function BuyerHome() {
       await addToCart(product);
       window.dispatchEvent(new CustomEvent("cartUpdated"));
       showToast(`${product.name} added to cart`);
-    } catch {
+    } catch (err) {
+      console.error(err);
       showToast("Failed to add item to cart");
     }
   }
@@ -62,47 +62,42 @@ export default function BuyerHome() {
     }
   }
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
+  const filteredProducts = products.filter((product) =>
+    product.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage   = Math.min(page, totalPages);
-  const pageItems  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
-  // Reset page when search changes
-  useEffect(() => { setPage(1); }, [search]);
+  const totalPages  = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  const safePage    = Math.min(page, totalPages);
+  const pageStart   = (safePage - 1) * PAGE_SIZE;
+  const pageItems   = filteredProducts.slice(pageStart, pageStart + PAGE_SIZE);
 
   if (loading) {
-    return (
-      <div className="card cardPad" style={{ textAlign: "center", padding: 48 }}>
-        <div className="muted">Loading products…</div>
-      </div>
-    );
+    return <div className="card cardPad">Loading products...</div>;
   }
 
   return (
     <div className="col" style={{ gap: 16 }}>
 
-      {/* Toast */}
+      {/* Toast notification */}
       {toast && (
         <div style={{
           position: "fixed", top: 24, right: 24, zIndex: 9999,
           background: "rgba(124,92,255,0.95)", color: "#fff",
           padding: "12px 20px", borderRadius: 10, fontWeight: 600,
-          fontSize: 14, boxShadow: "0 4px 20px rgba(0,0,0,.4)", pointerEvents: "none",
+          fontSize: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+          pointerEvents: "none",
         }}>
           {toast}
         </div>
       )}
 
-      {/* Header + search */}
+      {/* Header */}
       <div className="card cardPad">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div className="h2" style={{ fontWeight: 800 }}>🛍 Browse Products</div>
+            <div className="h2">🛍 Browse Products</div>
             <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-              {filtered.length} product{filtered.length !== 1 ? "s" : ""} available
+              {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""} available
               &nbsp;·&nbsp; Page {safePage} of {totalPages}
             </div>
           </div>
@@ -115,29 +110,21 @@ export default function BuyerHome() {
             style={{ minWidth: 240 }}
           />
         </div>
+        {error && (
+          <div style={{ marginTop: 10, fontSize: 13, color: "#fca5a5" }}>{error}</div>
+        )}
       </div>
 
-      {error && (
-        <div style={{
-          padding: "10px 16px", borderRadius: 10, fontSize: 13,
-          background: "rgba(239,68,68,0.12)", color: "#fca5a5",
-          border: "1px solid rgba(239,68,68,0.3)",
-        }}>
-          ⚠️ {error}
-        </div>
-      )}
-
-      {/* Product grid — 4 columns × 3 rows */}
-      {filtered.length === 0 ? (
+      {/* Product grid — fixed 4 columns */}
+      {pageItems.length === 0 ? (
         <div className="card cardPad" style={{ textAlign: "center", padding: 48 }}>
           <div className="muted">No products match your search.</div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
           {pageItems.map((product) => {
             const inCompare  = isInCompare(product.id);
             const outOfStock = product.quantity === 0;
-
             return (
               <div
                 key={product.id}
@@ -163,9 +150,10 @@ export default function BuyerHome() {
                     alt={product.name}
                     style={{
                       width: "100%", height: 160, objectFit: "contain",
-                      borderRadius: 8, background: "rgba(0,0,0,0.3)", padding: 6,
-                      display: "block",
+                      borderRadius: 8, background: "rgba(0,0,0,0.3)",
+                      padding: 6, display: "block", cursor: "pointer",
                     }}
+                    onClick={() => navigate(`/buyer/products/${product.id}`)}
                   />
                   {outOfStock && (
                     <div style={{
@@ -178,16 +166,22 @@ export default function BuyerHome() {
                   )}
                 </div>
 
-                {/* Name + description */}
-                <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3 }}>
+                {/* Name */}
+                <div
+                  style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, cursor: "pointer" }}
+                  onClick={() => navigate(`/buyer/products/${product.id}`)}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(124,92,255,1)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "")}
+                >
                   {product.name}
                 </div>
+
+                {/* Short description */}
                 {product.shortDesc && (
                   <div className="muted" style={{
-                    fontSize: 12, lineHeight: 1.5,
-                    overflow: "hidden", textOverflow: "ellipsis",
-                    display: "-webkit-box", WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
+                    fontSize: 12, lineHeight: 1.4,
+                    overflow: "hidden", display: "-webkit-box",
+                    WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                   }}>
                     {product.shortDesc}
                   </div>
@@ -195,7 +189,7 @@ export default function BuyerHome() {
 
                 {/* Price + stock */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontWeight: 800, fontSize: 16, color: "#22c55e" }}>
+                  <span style={{ fontWeight: 800, fontSize: 15, color: "#22c55e" }}>
                     ${Number(product.unitPrice).toFixed(2)}
                   </span>
                   <span className="muted" style={{ fontSize: 11 }}>
@@ -203,22 +197,28 @@ export default function BuyerHome() {
                   </span>
                 </div>
 
-                {/* Spacer pushes buttons to bottom */}
+                {/* Push buttons to bottom */}
                 <div style={{ flex: 1 }} />
 
-                {/* Add to cart */}
+                {/* Add to Cart */}
                 {outOfStock ? (
                   <button className="btn" disabled style={{ opacity: 0.5 }}>
                     Out of Stock
                   </button>
                 ) : (
-                  <button
-                    className="btn btnPrimary"
-                    onClick={() => handleAddToCart(product)}
-                  >
+                  <button className="btn btnPrimary" onClick={() => handleAddToCart(product)}>
                     Add to Cart
                   </button>
                 )}
+
+                {/* View Details */}
+                <button
+                  className="btn"
+                  style={{ fontSize: 12 }}
+                  onClick={() => navigate(`/buyer/products/${product.id}`)}
+                >
+                  View Details &amp; Reviews
+                </button>
 
                 {/* Compare toggle */}
                 <button
@@ -242,45 +242,58 @@ export default function BuyerHome() {
       {/* Pagination controls */}
       {totalPages > 1 && (
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
+
+          {/* Previous */}
           <button
             className="btn"
-            style={{ padding: "10px 22px", fontSize: 18, fontWeight: 700, opacity: safePage <= 1 ? 0.3 : 1 }}
             disabled={safePage <= 1}
             onClick={() => setPage((p) => p - 1)}
-          >←</button>
+            style={{ padding: "10px 22px", fontSize: 18, fontWeight: 700, opacity: safePage <= 1 ? 0.3 : 1 }}
+          >
+            ←
+          </button>
 
+          {/* Page number pills */}
           <div style={{ display: "flex", gap: 6 }}>
             {Array.from({ length: totalPages }, (_, i) => i + 1)
               .slice(Math.max(0, safePage - 3), Math.min(totalPages, safePage + 2))
               .map((p) => (
-              <button
-                key={p} className="btn"
-                style={{
-                  padding: "8px 14px", fontSize: 13, minWidth: 40,
-                  fontWeight: p === safePage ? 800 : 500,
-                  background: p === safePage
-                    ? "linear-gradient(135deg,rgba(124,92,255,0.55),rgba(124,92,255,0.25))"
-                    : "rgba(255,255,255,0.05)",
-                  borderColor: p === safePage ? "rgba(124,92,255,0.5)" : "rgba(255,255,255,0.1)",
-                  color: p === safePage ? "#c4b5fd" : "rgba(255,255,255,0.6)",
-                }}
-                onClick={() => setPage(p)}
-              >{p}</button>
-            ))}
+                <button
+                  key={p}
+                  className="btn"
+                  onClick={() => setPage(p)}
+                  style={{
+                    padding: "8px 14px", minWidth: 40, fontSize: 13,
+                    fontWeight: p === safePage ? 800 : 500,
+                    background: p === safePage
+                      ? "linear-gradient(135deg, rgba(124,92,255,0.55), rgba(124,92,255,0.25))"
+                      : "rgba(255,255,255,0.05)",
+                    borderColor: p === safePage ? "rgba(124,92,255,0.5)" : "rgba(255,255,255,0.1)",
+                    color: p === safePage ? "#c4b5fd" : "rgba(255,255,255,0.6)",
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
           </div>
 
+          {/* Next */}
           <button
             className="btn"
-            style={{ padding: "10px 22px", fontSize: 18, fontWeight: 700, opacity: safePage >= totalPages ? 0.3 : 1 }}
             disabled={safePage >= totalPages}
             onClick={() => setPage((p) => p + 1)}
-          >→</button>
+            style={{ padding: "10px 22px", fontSize: 18, fontWeight: 700, opacity: safePage >= totalPages ? 0.3 : 1 }}
+          >
+            →
+          </button>
         </div>
       )}
 
+      {/* Page summary */}
       <div style={{ textAlign: "center" }}>
         <span className="muted" style={{ fontSize: 12 }}>
-          Showing {pageItems.length} of {filtered.length} products &nbsp;·&nbsp; Page {safePage} of {totalPages}
+          Showing {pageItems.length} of {filteredProducts.length} products
+          &nbsp;·&nbsp; Page {safePage} of {totalPages}
         </span>
       </div>
 
@@ -301,8 +314,10 @@ export default function BuyerHome() {
                 background: "rgba(124,92,255,0.15)", border: "1px solid rgba(124,92,255,0.4)",
                 borderRadius: 8, padding: "4px 10px", fontSize: 13, whiteSpace: "nowrap",
               }}>
-                <img src={p.imageUrl || "/images/default-product.png"} alt={p.name}
-                  style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 4 }} />
+                <img
+                  src={p.imageUrl || "/images/default-product.png"} alt={p.name}
+                  style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 4 }}
+                />
                 <span>{p.name}</span>
                 <button
                   style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
@@ -320,6 +335,8 @@ export default function BuyerHome() {
           )}
         </div>
       )}
+
+      {/* Spacer so last row isn't hidden behind the compare bar */}
       {compareList.length > 0 && <div style={{ height: 64 }} />}
     </div>
   );

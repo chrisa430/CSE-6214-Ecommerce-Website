@@ -926,3 +926,39 @@ export async function changePassword(
   });
   return data;
 }
+
+// ── Product Reviews ───────────────────────────────────────────────────────────
+
+export interface ReviewRecord {
+  id:             string;
+  rating:         number;
+  review:         string | null;
+  buyerFirstName: string | null;
+  buyerLastName:  string | null;
+  createdAt:      string;
+}
+
+export interface ReviewsResponse {
+  totalReviews:  number;
+  averageRating: number;
+  reviews:       ReviewRecord[];
+}
+
+export async function getProductReviews(productId: string): Promise<ReviewsResponse> {
+  const { data } = await inventoryApi.get<ReviewsResponse>(
+    `/products/${productId}/reviews`
+  );
+  return data;
+}
+
+export async function submitProductReview(
+  productId: string,
+  rating:    number,
+  review?:   string
+): Promise<{ message: string }> {
+  const { data } = await inventoryApi.post<{ message: string }>(
+    `/products/${productId}/reviews`,
+    { rating, review }
+  );
+  return data;
+}
