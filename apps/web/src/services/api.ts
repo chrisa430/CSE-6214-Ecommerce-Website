@@ -46,6 +46,67 @@ const adminProductApi = axios.create({
   });
 });
 
+// ── 401 response interceptor: silent token refresh + retry ───────────────────
+// Access token expires in 15 min. On 401 this interceptor refreshes silently
+// and retries once. If the refresh token is also expired, it clears the
+// session and redirects to /login.
+let isRefreshing = false;
+let refreshQueue: Array<(token: string) => void> = [];
+
+function processQueue(newToken: string) {
+  refreshQueue.forEach((resolve) => resolve(newToken));
+  refreshQueue = [];
+}
+
+[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi, adminProductApi].forEach((instance) => {
+  instance.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const original = error.config;
+        if (
+            error.response?.status !== 401 ||
+            original._retry ||
+            original.url?.includes("/auth/refresh")
+        ) {
+          return Promise.reject(error);
+        }
+
+        original._retry = true;
+
+        if (isRefreshing) {
+          return new Promise((resolve) => {
+            refreshQueue.push((token: string) => {
+              original.headers.Authorization = `Bearer ${token}`;
+              resolve(instance(original));
+            });
+          });
+        }
+
+        isRefreshing = true;
+        try {
+          const storedRefresh = localStorage.getItem("refreshToken");
+          if (!storedRefresh) throw new Error("No refresh token");
+          const { data } = await authApi.post<{ accessToken: string }>("/refresh", {
+            refreshToken: storedRefresh,
+          });
+          const newToken = data.accessToken;
+          localStorage.setItem("accessToken", newToken);
+          processQueue(newToken);
+          original.headers.Authorization = `Bearer ${newToken}`;
+          return instance(original);
+        } catch {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("user");
+          window.location.href = "/login";
+          return Promise.reject(error);
+        } finally {
+          isRefreshing = false;
+        }
+      }
+  );
+});
+
 // ── Auth endpoints ──────────────────────────────────────────────────────────
 
 export interface LoginPayload {
@@ -96,7 +157,7 @@ export interface RegisterResponse {
 }
 
 export async function registerUser(
-  payload: RegisterPayload
+    payload: RegisterPayload
 ): Promise<RegisterResponse> {
   const { data } = await accountApi.post<RegisterResponse>("/register", payload);
   return data;
@@ -107,8 +168,8 @@ export async function registerUser(
 export function extractApiError(err: unknown): string {
   if (err instanceof AxiosError) {
     const data = err.response?.data as
-      | { error?: string; errors?: Record<string, string> }
-      | undefined;
+        | { error?: string; errors?: Record<string, string> }
+        | undefined;
     if (data?.error) return data.error;
     if (data?.errors) return Object.values(data.errors).join(" ");
     return err.message;
@@ -162,8 +223,8 @@ export async function getCategories(): Promise<Category[]> {
 }
 
 export async function updateProduct(
-  id: string,
-  payload: Partial<CreateProductPayload>
+    id: string,
+    payload: Partial<CreateProductPayload>
 ): Promise<Product> {
   const { data } = await inventoryApi.patch<Product>(`/products/${id}`, payload);
   return data;
@@ -214,12 +275,12 @@ export async function fetchOpenAccounts(): Promise<OpenAccount[]> {
 }
 
 export async function submitAccountDecision(
-  accountIds: string[],
-  decision: "approve" | "reject"
+    accountIds: string[],
+    decision: "approve" | "reject"
 ): Promise<{ message: string; count: number }> {
   const { data } = await adminApi.post<{ message: string; count: number }>(
-    "/accounts/decision",
-    { accountIds, decision }
+      "/accounts/decision",
+      { accountIds, decision }
   );
   return data;
 }
@@ -230,12 +291,12 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
 }
 
 export async function submitProductDecision(
-  productIds: string[],
-  decision: "approve" | "reject"
+    productIds: string[],
+    decision: "approve" | "reject"
 ): Promise<{ message: string; count: number }> {
   const { data } = await adminApi.post<{ message: string; count: number }>(
-    "/products/decision",
-    { productIds, decision }
+      "/products/decision",
+      { productIds, decision }
   );
   return data;
 }
@@ -337,7 +398,7 @@ export interface AccountSearchParams {
 
 /** Search / filter / sort all accounts — admin only */
 export async function searchAccounts(
-  params: AccountSearchParams = {}
+    params: AccountSearchParams = {}
 ): Promise<AccountRecord[]> {
   const { data } = await accountApi.get<AccountRecord[]>("/search", { params });
   return data;
@@ -411,12 +472,12 @@ export async function fetchProductDetail(id: string): Promise<ProductDetail> {
 
 /** Bulk set product status — admin only */
 export async function updateProductStatus(
-  productIds: string[],
-  status:     "active" | "suspended"
+    productIds: string[],
+    status:     "active" | "suspended"
 ): Promise<{ message: string; count: number }> {
   const { data } = await adminProductApi.post<{ message: string; count: number }>(
-    "/products/status",
-    { productIds, status }
+      "/products/status",
+      { productIds, status }
   );
   return data;
 }
@@ -451,12 +512,12 @@ export async function getOrderConfig(): Promise<OrderConfig> {
 
 /** Persist a single order configuration key/value */
 export async function updateOrderConfig(
-  key: string,
-  value: string
+    key: string,
+    value: string
 ): Promise<{ message: string; key: string; value: string }> {
   const { data } = await adminApi.put<{ message: string; key: string; value: string }>(
-    "/orders/config",
-    { key, value }
+      "/orders/config",
+      { key, value }
   );
   return data;
 }
@@ -513,9 +574,9 @@ export async function getSellerReturns(): Promise<SellerReturnRow[]> {
 
 /** Buyer: initiate a return for one item from an order */
 export async function requestReturn(
-  orderId: string,
-  orderItemId: string,
-  reason?: string
+    orderId: string,
+    orderItemId: string,
+    reason?: string
 ): Promise<{ message: string; returnId: string; status: string }> {
   const { data } = await orderApi.post(`/${orderId}/return`, { orderItemId, reason });
   return data;
@@ -571,9 +632,9 @@ export async function getMyTrades(): Promise<TradeRecord[]> {
 
 /** Propose a trade: offer one of your products in exchange for another seller's */
 export async function proposeTrade(
-  offeredProductId: string,
-  requestedProductId: string,
-  notes?: string
+    offeredProductId: string,
+    requestedProductId: string,
+    notes?: string
 ): Promise<{ id: string; status: string }> {
   const { data } = await inventoryApi.post("/trades", { offeredProductId, requestedProductId, notes });
   return data;
@@ -599,9 +660,9 @@ export async function cancelTrade(tradeId: string): Promise<{ message: string }>
 
 /** Seller: bulk approve, decline, or dispute return requests */
 export async function actionReturn(
-  returnIds: string[],
-  action:    "approved" | "declined" | "disputed",
-  notes?:    string
+    returnIds: string[],
+    action:    "approved" | "declined" | "disputed",
+    notes?:    string
 ): Promise<{ message: string; action: string; updated: number }> {
   const { data } = await orderApi.put("/returns/action", { returnIds, action, notes });
   return data;
@@ -715,12 +776,12 @@ export async function getRssAdminSubscribers(): Promise<RssSubscriberRow[]> {
 // ── Admin account status (activate / suspend / close) ─────────────────────────
 
 export async function updateAccountStatus(
-  accountIds: string[],
-  status: "active" | "suspended" | "closed"
+    accountIds: string[],
+    status: "active" | "suspended" | "closed"
 ): Promise<{ message: string; count: number }> {
   const { data } = await adminApi.post<{ message: string; count: number }>(
-    "/accounts/status",
-    { accountIds, status }
+      "/accounts/status",
+      { accountIds, status }
   );
   return data;
 }
@@ -747,7 +808,7 @@ export async function getAuditLogs(opts: {
   if (opts.offset !== undefined) params["offset"] = String(opts.offset);
   if (opts.action)               params["action"] = opts.action;
   const { data } = await adminApi.get<{ rows: AuditLogRow[]; total: number }>(
-    "/audit-logs", { params }
+      "/audit-logs", { params }
   );
   return data;
 }
@@ -854,8 +915,8 @@ export async function addPaymentMethod(pm: {
 }
 
 export async function updatePaymentMethod(
-  pmId: string,
-  pm: { type?: string; nickname?: string; cardNumber?: string; expMonth?: number; expYear?: number }
+    pmId: string,
+    pm: { type?: string; nickname?: string; cardNumber?: string; expMonth?: number; expYear?: number }
 ): Promise<void> {
   const id = accountId();
   await accountApi.put(`/${id}/payment-methods/${pmId}`, pm);
@@ -910,8 +971,8 @@ export async function forgotPassword(email: string): Promise<{ message: string }
 }
 
 export async function resetPassword(
-  token: string,
-  newPassword: string
+    token: string,
+    newPassword: string
 ): Promise<{ message: string }> {
   const { data } = await accountApi.post<{ message: string }>("/reset-password", {
     token, newPassword,
@@ -920,8 +981,8 @@ export async function resetPassword(
 }
 
 export async function changePassword(
-  currentPassword: string,
-  newPassword: string
+    currentPassword: string,
+    newPassword: string
 ): Promise<{ message: string }> {
   const { data } = await accountApi.post<{ message: string }>("/my/change-password", {
     currentPassword, newPassword,
@@ -948,19 +1009,19 @@ export interface ReviewsResponse {
 
 export async function getProductReviews(productId: string): Promise<ReviewsResponse> {
   const { data } = await inventoryApi.get<ReviewsResponse>(
-    `/products/${productId}/reviews`
+      `/products/${productId}/reviews`
   );
   return data;
 }
 
 export async function submitProductReview(
-  productId: string,
-  rating:    number,
-  review?:   string
+    productId: string,
+    rating:    number,
+    review?:   string
 ): Promise<{ message: string }> {
   const { data } = await inventoryApi.post<{ message: string }>(
-    `/products/${productId}/reviews`,
-    { rating, review }
+      `/products/${productId}/reviews`,
+      { rating, review }
   );
   return data;
 }
