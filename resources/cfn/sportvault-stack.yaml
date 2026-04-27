@@ -1196,12 +1196,17 @@ Resources:
             - {Name: CORS_ORIGIN,     Value: !Ref CorsOrigin}
             - {Name: INTERNAL_SECRET, Value: internal-secret}
             - {Name: KAFKA_BROKERS,     Value: 'kafka.sportvault.local:9092'}
+            - {Name: ACCOUNT_DB_NAME,    Value: account}
+            - {Name: ACCOUNT_DB_PORT,    Value: '5432'}
           Secrets:
             - {Name: DB_HOST,           ValueFrom: !Sub '${InventoryDBSecret}:DB_HOST::'}
             - {Name: DB_USER,           ValueFrom: !Sub '${InventoryDBSecret}:DB_USER::'}
             - {Name: DB_PASS,           ValueFrom: !Sub '${InventoryDBSecret}:DB_PASS::'}
             - {Name: JWT_ACCESS_SECRET,  ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
             - {Name: JWT_REFRESH_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_REFRESH_SECRET::'}
+            - {Name: ACCOUNT_DB_HOST,    ValueFrom: !Sub '${AdminDBSecret}:ACCOUNT_DB_HOST::'}
+            - {Name: ACCOUNT_DB_USER,    ValueFrom: !Sub '${AdminDBSecret}:ACCOUNT_DB_USER::'}
+            - {Name: ACCOUNT_DB_PASS,    ValueFrom: !Sub '${AdminDBSecret}:ACCOUNT_DB_PASS::'}
           LogConfiguration:
             LogDriver: awslogs
             Options:
