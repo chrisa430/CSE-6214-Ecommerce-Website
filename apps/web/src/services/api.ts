@@ -1025,3 +1025,90 @@ export async function submitProductReview(
   );
   return data;
 }
+
+// -- Seller Service API -------------------------------------------------------
+
+const sellerApi = axios.create({
+  baseURL: "/api/sellers",
+  headers: { "Content-Type": "application/json" },
+});
+
+sellerApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem("accessToken");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export interface SellerProfile {
+  seller_id:   string;
+  bio:         string | null;
+  store_name:  string | null;
+  status_name: string;
+}
+
+export interface SellerReview {
+  id:             string;
+  rating:         number;
+  review:         string | null;
+  buyerFirstName: string | null;
+  buyerLastName:  string | null;
+  createdAt:      string;
+}
+
+export async function getSellerProfile(sellerId: string): Promise<SellerProfile> {
+  const { data } = await sellerApi.get<SellerProfile>(`/${sellerId}`);
+  return data;
+}
+
+export async function getSellerReviews(sellerId: string): Promise<SellerReview[]> {
+  const { data } = await sellerApi.get<SellerReview[]>(`/${sellerId}/ratings`);
+  return data;
+}
+
+export async function submitSellerReview(
+    sellerId: string,
+    rating:   number,
+    review?:  string
+): Promise<{ message: string }> {
+  const { data } = await sellerApi.post<{ message: string }>(
+      `/${sellerId}/ratings`,
+      { rating, review }
+  );
+  return data;
+}
+
+export async function getProductsBySeller(sellerId: string): Promise<Product[]> {
+  const { data } = await inventoryApi.get<Product[]>(`/products/by-seller/${sellerId}`);
+  return data;
+}
+
+// -- Account Info (public seller lookup) -------------------------------------
+
+export interface AccountInfo {
+  id:        string;
+  firstName: string;
+  lastName:  string;
+  email:     string;
+}
+
+export async function getAccountById(accountId: string): Promise<AccountInfo> {
+  const { data } = await accountApi.get<AccountInfo>(`/${accountId}`);
+  return data;
+}
+
+// -- Seller Sales ------------------------------------------------------------
+
+export interface SellerSale {
+  orderId:     string;
+  productId:   string;
+  productName: string;
+  quantity:    number;
+  unitPrice:   number;
+  buyerName:   string;
+  saleDate:    string;
+}
+
+export async function getSellerSales(): Promise<SellerSale[]> {
+  const { data } = await orderApi.get<SellerSale[]>("/my/sales");
+  return data;
+}
