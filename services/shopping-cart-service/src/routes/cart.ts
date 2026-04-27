@@ -21,34 +21,34 @@ router.get("/test", (_req: Request, res: Response) => {
 async function getOrCreateCartId(buyerId: string): Promise<string> {
   const pool = getPool();
   const existing = await pool.query(
-    `SELECT id FROM shopping_cart WHERE buyer_id = $1 LIMIT 1`,
-    [buyerId]
+      `SELECT id FROM shopping_cart WHERE buyer_id = $1 LIMIT 1`,
+      [buyerId]
   );
   if (existing.rowCount && existing.rows[0]?.id) {
     return existing.rows[0].id as string;
   }
   const created = await pool.query(
-    `INSERT INTO shopping_cart (buyer_id) VALUES ($1) RETURNING id`,
-    [buyerId]
+      `INSERT INTO shopping_cart (buyer_id) VALUES ($1) RETURNING id`,
+      [buyerId]
   );
   return created.rows[0].id as string;
 }
 
-// ── Shared handler: list all items in the buyer's cart ───────────────────────
+// -- Shared handler: list all items in the buyer's cart -----------------------
 async function handleGetCart(req: Request, res: Response): Promise<void> {
   const pool = getPool();
   const buyerId = (req as any).user.sub;
   try {
     const cartId = await getOrCreateCartId(buyerId);
     const result = await pool.query(
-      `SELECT
+        `SELECT
          sci.product_id AS "productId",
          sci.quantity,
          sci.unit_price AS "unitPrice"
        FROM shopping_cart_items sci
        WHERE sci.shopping_cart_id = $1
        ORDER BY sci.added_at DESC`,
-      [cartId]
+        [cartId]
     );
     res.json(result.rows);
   } catch (err) {
@@ -57,15 +57,15 @@ async function handleGetCart(req: Request, res: Response): Promise<void> {
   }
 }
 
-// ── GET /cart/  (kept for direct service calls) ──────────────────────────────
+// -- GET /cart/  (kept for direct service calls) ------------------------------
 router.get("/", requireAuth, requireRole("buyer"), handleGetCart);
 
-// ── GET /cart/items  (ALB-routable alias — frontend uses this path) ───────────
+// -- GET /cart/items  (ALB-routable alias - frontend uses this path) -----------
 // The ALB listener rule covers /cart/items but not the bare /cart root,
 // so the frontend calls GET /cart/items to reliably reach this service.
 router.get("/items", requireAuth, requireRole("buyer"), handleGetCart);
 
-// ── POST /cart/items ──────────────────────────────────────────────────────────
+// -- POST /cart/items ----------------------------------------------------------
 router.post("/items", requireAuth, requireRole("buyer"), async (req: Request, res: Response) => {
   const pool = getPool();
   const buyerId = (req as any).user.sub;
@@ -90,27 +90,27 @@ router.post("/items", requireAuth, requireRole("buyer"), async (req: Request, re
   try {
     const cartId = await getOrCreateCartId(buyerId);
     const existing = await pool.query(
-      `SELECT id, quantity FROM shopping_cart_items
-       WHERE shopping_cart_id = $1 AND product_id = $2`,
-      [cartId, productId]
+        `SELECT id, quantity FROM shopping_cart_items
+         WHERE shopping_cart_id = $1 AND product_id = $2`,
+        [cartId, productId]
     );
 
     let result;
     if (existing.rowCount && existing.rows[0]?.id) {
       const updated = await pool.query(
-        `UPDATE shopping_cart_items
-         SET quantity = quantity + $1
-         WHERE id = $2
-         RETURNING id, product_id AS "productId", quantity, unit_price AS "unitPrice"`,
-        [qty, existing.rows[0].id]
+          `UPDATE shopping_cart_items
+           SET quantity = quantity + $1
+           WHERE id = $2
+             RETURNING id, product_id AS "productId", quantity, unit_price AS "unitPrice"`,
+          [qty, existing.rows[0].id]
       );
       result = updated.rows[0];
     } else {
       const inserted = await pool.query(
-        `INSERT INTO shopping_cart_items (shopping_cart_id, product_id, quantity, unit_price)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, product_id AS "productId", quantity, unit_price AS "unitPrice"`,
-        [cartId, productId, qty, unitPrice]
+          `INSERT INTO shopping_cart_items (shopping_cart_id, product_id, quantity, unit_price)
+           VALUES ($1, $2, $3, $4)
+             RETURNING id, product_id AS "productId", quantity, unit_price AS "unitPrice"`,
+          [cartId, productId, qty, unitPrice]
       );
       result = inserted.rows[0];
     }
@@ -132,7 +132,7 @@ router.post("/items", requireAuth, requireRole("buyer"), async (req: Request, re
   }
 });
 
-// ── DELETE /cart/items/:productId ─────────────────────────────────────────────
+// -- DELETE /cart/items/:productId ---------------------------------------------
 router.delete("/items/:productId", requireAuth, requireRole("buyer"), async (req: Request, res: Response) => {
   const pool = getPool();
   const buyerId = (req as any).user.sub;
@@ -141,10 +141,10 @@ router.delete("/items/:productId", requireAuth, requireRole("buyer"), async (req
   try {
     const cartId = await getOrCreateCartId(buyerId);
     const deleted = await pool.query(
-      `DELETE FROM shopping_cart_items
-       WHERE shopping_cart_id = $1 AND product_id = $2
-       RETURNING id`,
-      [cartId, productId]
+        `DELETE FROM shopping_cart_items
+         WHERE shopping_cart_id = $1 AND product_id = $2
+           RETURNING id`,
+        [cartId, productId]
     );
 
     if (!deleted.rowCount) {
@@ -167,7 +167,7 @@ router.delete("/items/:productId", requireAuth, requireRole("buyer"), async (req
   }
 });
 
-// ── POST /cart/internal/seed ──────────────────────────────────────────────────
+// -- POST /cart/internal/seed --------------------------------------------------
 router.post("/internal/seed", requireInternalSecret as any, async (req: Request, res: Response): Promise<void> => {
   const pool = getPool();
   try {
@@ -175,8 +175,8 @@ router.post("/internal/seed", requireInternalSecret as any, async (req: Request,
     let carts_inserted = 0;
     for (const buyerId of buyerIds.slice(0, 5)) {
       const r = await pool.query(
-        `INSERT INTO shopping_cart (buyer_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id`,
-        [buyerId]
+          `INSERT INTO shopping_cart (buyer_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id`,
+          [buyerId]
       );
       if (r.rowCount) carts_inserted++;
     }

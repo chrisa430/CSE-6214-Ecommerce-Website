@@ -312,7 +312,7 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
 
         for (const item of items) {
             const productResult = await inventoryPool.query(
-                `SELECT quantity, name
+                `SELECT quantity, name, seller_id AS "sellerId"
                  FROM product
                  WHERE id = $1`,
                 [item.productId]
@@ -339,17 +339,19 @@ router.post("/checkout", requireAuth, requireRole("buyer"), async (req: Request,
             );
 
             const productName = productResult.rows[0].name as string;
+            const sellerId    = productResult.rows[0].sellerId as string | null;
             const imageUrl =
                 (imageResult.rows[0]?.imageUrl as string | undefined) ||
                 "/images/default-product.png";
 
             await orderPool.query(
                 `INSERT INTO completed_order_items
-                     (order_id, product_id, quantity, unit_price, name, image_url)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                     (order_id, product_id, seller_id, quantity, unit_price, name, image_url)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [
                     orderId,
                     item.productId,
+                    sellerId,
                     item.quantity,
                     item.unitPrice,
                     productName,
@@ -890,6 +892,42 @@ router.put(
             });
         } catch (err) {
             logger.error("Return action error", err);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    }
+);
+
+// ── GET /orders/sales/mine — seller earnings + sales history ──────────────────
+router.get(
+    "/sales/mine",
+    requireAuth,
+    requireRole("seller"),
+    async (req: Request, res: Response): Promise<void> => {
+        const sellerId = (req as any).user.sub as string;
+        const pool = getPool();
+        try {
+            const result = await pool.query(
+                `SELECT
+                     coi.id                                  AS "itemId",
+                     coi.product_id                          AS "productId",
+                     coi.name                                AS "productName",
+                     coi.quantity,
+                     coi.unit_price                          AS "unitPrice",
+                     (coi.unit_price * coi.quantity)         AS "lineTotal",
+                     coi.image_url                           AS "imageUrl",
+                     o.id                                    AS "orderId",
+                     o.created_at                            AS "orderDate",
+                     os.name                                 AS "orderStatus"
+                 FROM completed_order_items coi
+                 JOIN "order" o       ON o.id  = coi.order_id
+                 JOIN order_status os ON os.id = o.status_id
+                 WHERE coi.seller_id = $1
+                 ORDER BY o.created_at DESC`,
+                [sellerId]
+            );
+            res.json(result.rows);
+        } catch (err) {
+            logger.error("Get seller sales error", err);
             res.status(500).json({ error: "Internal server error" });
         }
     }
