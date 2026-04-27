@@ -1039,20 +1039,14 @@ sellerApi.interceptors.request.use((config) => {
   return config;
 });
 
+// SellerProfile — matches BuyerSellerPage.tsx usage
 export interface SellerProfile {
-  seller_id:   string;
-  bio:         string | null;
-  store_name:  string | null;
-  status_name: string;
-}
-
-export interface SellerReview {
-  id:             string;
-  rating:         number;
-  review:         string | null;
-  buyerFirstName: string | null;
-  buyerLastName:  string | null;
-  createdAt:      string;
+  id:         string;
+  sellerId:   string;
+  storeName:  string | null;
+  bio:        string | null;
+  statusName: string;
+  createdAt:  string;
 }
 
 export async function getSellerProfile(sellerId: string): Promise<SellerProfile> {
@@ -1060,8 +1054,9 @@ export async function getSellerProfile(sellerId: string): Promise<SellerProfile>
   return data;
 }
 
-export async function getSellerReviews(sellerId: string): Promise<SellerReview[]> {
-  const { data } = await sellerApi.get<SellerReview[]>(`/${sellerId}/ratings`);
+// getSellerReviews returns ReviewsResponse (same type used by BuyerProductDetail)
+export async function getSellerReviews(sellerId: string): Promise<ReviewsResponse> {
+  const { data } = await sellerApi.get<ReviewsResponse>(`/${sellerId}/ratings`);
   return data;
 }
 
@@ -1082,7 +1077,7 @@ export async function getProductsBySeller(sellerId: string): Promise<Product[]> 
   return data;
 }
 
-// -- Account Info (public seller lookup) -------------------------------------
+// -- Account Info ------------------------------------------------------------
 
 export interface AccountInfo {
   id:        string;
@@ -1098,14 +1093,19 @@ export async function getAccountById(accountId: string): Promise<AccountInfo> {
 
 // -- Seller Sales ------------------------------------------------------------
 
+// SellerSale — matches SellerHome.tsx usage (lineTotal, itemId, imageUrl, orderDate, orderStatus)
 export interface SellerSale {
+  itemId:      string;
   orderId:     string;
   productId:   string;
   productName: string;
+  imageUrl:    string | null;
   quantity:    number;
   unitPrice:   number;
+  lineTotal:   number;
   buyerName:   string;
-  saleDate:    string;
+  orderDate:   string;
+  orderStatus: string;
 }
 
 export async function getSellerSales(): Promise<SellerSale[]> {
