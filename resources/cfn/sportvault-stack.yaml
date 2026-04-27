@@ -975,6 +975,8 @@ Resources:
             - {Name: SEED_PASSWORD,       ValueFrom: !Sub '${AccountDBSecret}:SEED_PASSWORD::'}
             - {Name: ADMIN_PASSWORD,      ValueFrom: !Sub '${AccountDBSecret}:ADMIN_PASSWORD::'}
             - {Name: ADMIN_SEED_PASSWORD, ValueFrom: !Sub '${AccountDBSecret}:ADMIN_SEED_PASSWORD::'}
+            - {Name: JWT_ACCESS_SECRET,  ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_REFRESH_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_REFRESH_SECRET::'}
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -1028,6 +1030,8 @@ Resources:
             - {Name: ORDER_DB_HOST,     ValueFrom: !Sub '${AdminDBSecret}:ORDER_DB_HOST::'}
             - {Name: ORDER_DB_USER,     ValueFrom: !Sub '${AdminDBSecret}:ORDER_DB_USER::'}
             - {Name: ORDER_DB_PASS,     ValueFrom: !Sub '${AdminDBSecret}:ORDER_DB_PASS::'}
+            - {Name: JWT_ACCESS_SECRET,  ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_REFRESH_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_REFRESH_SECRET::'}
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -1063,7 +1067,8 @@ Resources:
             - {Name: DB_HOST,           ValueFrom: !Sub '${CartDBSecret}:DB_HOST::'}
             - {Name: DB_USER,           ValueFrom: !Sub '${CartDBSecret}:DB_USER::'}
             - {Name: DB_PASS,           ValueFrom: !Sub '${CartDBSecret}:DB_PASS::'}
-            - {Name: JWT_ACCESS_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_ACCESS_SECRET,  ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_REFRESH_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_REFRESH_SECRET::'}
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -1121,7 +1126,8 @@ Resources:
             - {Name: ACCOUNT_DB_HOST,   ValueFrom: !Sub '${OrderDBSecret}:ACCOUNT_DB_HOST::'}
             - {Name: ACCOUNT_DB_USER,   ValueFrom: !Sub '${OrderDBSecret}:ACCOUNT_DB_USER::'}
             - {Name: ACCOUNT_DB_PASS,   ValueFrom: !Sub '${OrderDBSecret}:ACCOUNT_DB_PASS::'}
-            - {Name: JWT_ACCESS_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_ACCESS_SECRET,  ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_REFRESH_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_REFRESH_SECRET::'}
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -1156,7 +1162,9 @@ Resources:
           Secrets:
             - {Name: DB_HOST,       ValueFrom: !Sub '${SellerDBSecret}:DB_HOST::'}
             - {Name: DB_USER,       ValueFrom: !Sub '${SellerDBSecret}:DB_USER::'}
-            - {Name: DB_PASS,       ValueFrom: !Sub '${SellerDBSecret}:DB_PASS::'}
+            - {Name: DB_PASS,           ValueFrom: !Sub '${SellerDBSecret}:DB_PASS::'}
+            - {Name: JWT_ACCESS_SECRET,  ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_REFRESH_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_REFRESH_SECRET::'}
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -1192,7 +1200,8 @@ Resources:
             - {Name: DB_HOST,           ValueFrom: !Sub '${InventoryDBSecret}:DB_HOST::'}
             - {Name: DB_USER,           ValueFrom: !Sub '${InventoryDBSecret}:DB_USER::'}
             - {Name: DB_PASS,           ValueFrom: !Sub '${InventoryDBSecret}:DB_PASS::'}
-            - {Name: JWT_ACCESS_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_ACCESS_SECRET,  ValueFrom: !Sub '${JWTSecret}:JWT_ACCESS_SECRET::'}
+            - {Name: JWT_REFRESH_SECRET, ValueFrom: !Sub '${JWTSecret}:JWT_REFRESH_SECRET::'}
           LogConfiguration:
             LogDriver: awslogs
             Options:
