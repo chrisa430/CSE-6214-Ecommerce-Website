@@ -75,7 +75,7 @@ export const router = createBrowserRouter([
       { path: "returns",            element: <BuyerReturns /> },
       { path: "compare",            element: <BuyerCompare /> },
       { path: "products/:id",       element: <BuyerProductDetail /> },
-      { path: "sellers/:sellerId",  element: <BuyerSellerPage /> },
+      { path: "sellers/:id", element: <BuyerSellerPage /> },
       { path: "change-password",    element: <ChangePassword /> },
     ],
   },
