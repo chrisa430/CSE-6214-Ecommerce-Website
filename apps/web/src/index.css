@@ -144,6 +144,15 @@ a {
   box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.18);
 }
 
+select.input {
+  background: #1a2235;
+}
+
+select.input option {
+  background: #1a2235;
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .label {
   font-size: 13px;
   color: var(--muted);
