@@ -1055,8 +1055,13 @@ export async function getSellerProfile(sellerId: string): Promise<SellerProfile>
 }
 
 // getSellerReviews returns ReviewsResponse (same type used by BuyerProductDetail)
+//export async function getSellerReviews(sellerId: string): Promise<ReviewsResponse> {
+//  const { data } = await sellerApi.get<ReviewsResponse>(`/${sellerId}/ratings`);
+//  return data;
+//}
+
 export async function getSellerReviews(sellerId: string): Promise<ReviewsResponse> {
-  const { data } = await sellerApi.get<ReviewsResponse>(`/${sellerId}/ratings`);
+  const { data } = await sellerApi.get<ReviewsResponse>(`/${sellerId}/reviews`);
   return data;
 }
 
