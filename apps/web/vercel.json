@@ -10,7 +10,11 @@
     { "source": "/api/accounts/:path*",  "destination": "https://api.sportvault.co/accounts/:path*" },
     { "source": "/api/admin/:path*",     "destination": "https://api.sportvault.co/admin/:path*" },
     { "source": "/api/inventory/:path*", "destination": "https://api.sportvault.co/inventory/:path*" },
+    { "source": "/api/cart",             "destination": "https://api.sportvault.co/cart" },
+    { "source": "/api/cart/",            "destination": "https://api.sportvault.co/cart" },
     { "source": "/api/cart/:path*",      "destination": "https://api.sportvault.co/cart/:path*" },
+    { "source": "/api/orders",           "destination": "https://api.sportvault.co/orders" },
+    { "source": "/api/orders/",          "destination": "https://api.sportvault.co/orders" },
     { "source": "/api/orders/:path*",    "destination": "https://api.sportvault.co/orders/:path*" },
     { "source": "/api/sellers/:path*",   "destination": "https://api.sportvault.co/sellers/:path*" },
     { "source": "/(.*)",                 "destination": "/index.html" }

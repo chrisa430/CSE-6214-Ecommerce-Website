@@ -49,6 +49,7 @@ export default function BuyerLayout() {
 
           <nav className="col" style={{ gap: 10 }}>
             <NavItem to="/buyer/profile">Account Profile</NavItem>
+            <NavItem to="/buyer/change-password">🔒 Change Password</NavItem>
             <NavItem to="/buyer">Browse Products</NavItem>
             <NavItem to="/buyer/cart">
               <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>

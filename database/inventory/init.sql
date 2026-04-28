@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS product_image (
     name        VARCHAR(255),
     short_desc  VARCHAR(128),
     long_desc   TEXT,
-    image_url   TEXT NOT NULL,
+    image_url   VARCHAR(2048) NOT NULL,
     sort_order  INTEGER       NOT NULL DEFAULT 0,
     is_primary  BOOLEAN       NOT NULL DEFAULT FALSE
 );
@@ -161,19 +161,6 @@ CREATE INDEX idx_pi_product_id ON product_image(product_id);
 CREATE UNIQUE INDEX idx_pi_one_primary
     ON product_image(product_id)
     WHERE is_primary = TRUE;
-
--- ── product_review ───────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS product_review (
-    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    product_id UUID        NOT NULL REFERENCES product(id) ON DELETE CASCADE,
-    buyer_id   UUID        NOT NULL,                -- FK to account.account (app-enforced)
-    rating     INTEGER     NOT NULL CHECK (rating BETWEEN 1 AND 5),
-    review     TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (product_id, buyer_id)
-);
-CREATE INDEX idx_pr_product_id ON product_review(product_id);
-CREATE INDEX idx_pr_buyer_id   ON product_review(buyer_id);
 
 -- ── inventory_audit_log ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS inventory_audit_log (
@@ -194,6 +181,20 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_product_updated_at
 BEFORE UPDATE ON product
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ── product_review ───────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS product_review (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id  UUID        NOT NULL REFERENCES product(id) ON DELETE CASCADE,
+    buyer_id    UUID        NOT NULL,
+    rating      INTEGER     NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    review      TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (product_id, buyer_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_product_id ON product_review(product_id);
+CREATE INDEX IF NOT EXISTS idx_pr_buyer_id   ON product_review(buyer_id);
 
 -- ── trade_request ─────────────────────────────────────────────────────────────
 -- Tracks seller-to-seller trade proposals. Both products are locked to 'traded'

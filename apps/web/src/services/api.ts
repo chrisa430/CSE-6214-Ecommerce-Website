@@ -37,18 +37,74 @@ const adminProductApi = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-const sellerApi = axios.create({
-  baseURL: "/api/sellers",
-  headers: { "Content-Type": "application/json" },
-});
-
 // Attach JWT to every authenticated request automatically
-[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi, adminProductApi, sellerApi].forEach((instance) => {
+[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi, adminProductApi].forEach((instance) => {
   instance.interceptors.request.use((config) => {
     const token = localStorage.getItem("accessToken");
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   });
+});
+
+// ── 401 response interceptor: silent token refresh + retry ───────────────────
+// Access token expires in 15 min. On 401 this interceptor refreshes silently
+// and retries once. If the refresh token is also expired, it clears the
+// session and redirects to /login.
+let isRefreshing = false;
+let refreshQueue: Array<(token: string) => void> = [];
+
+function processQueue(newToken: string) {
+  refreshQueue.forEach((resolve) => resolve(newToken));
+  refreshQueue = [];
+}
+
+[authApi, accountApi, adminApi, inventoryApi, cartApi, orderApi, adminProductApi].forEach((instance) => {
+  instance.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const original = error.config;
+        if (
+            error.response?.status !== 401 ||
+            original._retry ||
+            original.url?.includes("/auth/refresh")
+        ) {
+          return Promise.reject(error);
+        }
+
+        original._retry = true;
+
+        if (isRefreshing) {
+          return new Promise((resolve) => {
+            refreshQueue.push((token: string) => {
+              original.headers.Authorization = `Bearer ${token}`;
+              resolve(instance(original));
+            });
+          });
+        }
+
+        isRefreshing = true;
+        try {
+          const storedRefresh = localStorage.getItem("refreshToken");
+          if (!storedRefresh) throw new Error("No refresh token");
+          const { data } = await authApi.post<{ accessToken: string }>("/refresh", {
+            refreshToken: storedRefresh,
+          });
+          const newToken = data.accessToken;
+          localStorage.setItem("accessToken", newToken);
+          processQueue(newToken);
+          original.headers.Authorization = `Bearer ${newToken}`;
+          return instance(original);
+        } catch {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("user");
+          window.location.href = "/login";
+          return Promise.reject(error);
+        } finally {
+          isRefreshing = false;
+        }
+      }
+  );
 });
 
 // ── Auth endpoints ──────────────────────────────────────────────────────────
@@ -101,7 +157,7 @@ export interface RegisterResponse {
 }
 
 export async function registerUser(
-  payload: RegisterPayload
+    payload: RegisterPayload
 ): Promise<RegisterResponse> {
   const { data } = await accountApi.post<RegisterResponse>("/register", payload);
   return data;
@@ -112,8 +168,8 @@ export async function registerUser(
 export function extractApiError(err: unknown): string {
   if (err instanceof AxiosError) {
     const data = err.response?.data as
-      | { error?: string; errors?: Record<string, string> }
-      | undefined;
+        | { error?: string; errors?: Record<string, string> }
+        | undefined;
     if (data?.error) return data.error;
     if (data?.errors) return Object.values(data.errors).join(" ");
     return err.message;
@@ -125,7 +181,6 @@ export function extractApiError(err: unknown): string {
 
 export interface Product {
   id: string;
-  sellerId?: string;
   name: string;
   shortDesc?: string;
   longDesc?: string;
@@ -168,8 +223,8 @@ export async function getCategories(): Promise<Category[]> {
 }
 
 export async function updateProduct(
-  id: string,
-  payload: Partial<CreateProductPayload>
+    id: string,
+    payload: Partial<CreateProductPayload>
 ): Promise<Product> {
   const { data } = await inventoryApi.patch<Product>(`/products/${id}`, payload);
   return data;
@@ -215,17 +270,17 @@ export interface PendingProduct {
 }
 
 export async function fetchOpenAccounts(): Promise<OpenAccount[]> {
-  const { data } = await adminApi.get<OpenAccount[]>("/accounts/open");
+  const { data } = await adminApi.get<OpenAccount[]>("/accounts");
   return data;
 }
 
 export async function submitAccountDecision(
-  accountIds: string[],
-  decision: "approve" | "reject"
+    accountIds: string[],
+    decision: "approve" | "reject"
 ): Promise<{ message: string; count: number }> {
   const { data } = await adminApi.post<{ message: string; count: number }>(
-    "/accounts/decision",
-    { accountIds, decision }
+      "/accounts/decision",
+      { accountIds, decision }
   );
   return data;
 }
@@ -236,12 +291,12 @@ export async function fetchPendingProducts(): Promise<PendingProduct[]> {
 }
 
 export async function submitProductDecision(
-  productIds: string[],
-  decision: "approve" | "reject"
+    productIds: string[],
+    decision: "approve" | "reject"
 ): Promise<{ message: string; count: number }> {
   const { data } = await adminApi.post<{ message: string; count: number }>(
-    "/products/decision",
-    { productIds, decision }
+      "/products/decision",
+      { productIds, decision }
   );
   return data;
 }
@@ -257,7 +312,9 @@ export interface CartItem {
 }
 
 export async function getCart(): Promise<CartItem[]> {
-  const { data } = await cartApi.get<CartItem[]>("/");
+  // GET /cart/items is used instead of GET /cart/ because the ALB listener
+  // rule covers /cart/items but not the bare /cart root path.
+  const { data } = await cartApi.get<CartItem[]>("/items");
   return data;
 }
 
@@ -341,7 +398,7 @@ export interface AccountSearchParams {
 
 /** Search / filter / sort all accounts — admin only */
 export async function searchAccounts(
-  params: AccountSearchParams = {}
+    params: AccountSearchParams = {}
 ): Promise<AccountRecord[]> {
   const { data } = await accountApi.get<AccountRecord[]>("/search", { params });
   return data;
@@ -415,12 +472,12 @@ export async function fetchProductDetail(id: string): Promise<ProductDetail> {
 
 /** Bulk set product status — admin only */
 export async function updateProductStatus(
-  productIds: string[],
-  status:     "active" | "suspended"
+    productIds: string[],
+    status:     "active" | "suspended"
 ): Promise<{ message: string; count: number }> {
   const { data } = await adminProductApi.post<{ message: string; count: number }>(
-    "/products/status",
-    { productIds, status }
+      "/products/status",
+      { productIds, status }
   );
   return data;
 }
@@ -455,34 +512,13 @@ export async function getOrderConfig(): Promise<OrderConfig> {
 
 /** Persist a single order configuration key/value */
 export async function updateOrderConfig(
-  key: string,
-  value: string
+    key: string,
+    value: string
 ): Promise<{ message: string; key: string; value: string }> {
   const { data } = await adminApi.put<{ message: string; key: string; value: string }>(
-    "/orders/config",
-    { key, value }
+      "/orders/config",
+      { key, value }
   );
-  return data;
-}
-
-// ── Seller sales / earnings ───────────────────────────────────────────────────
-
-export interface SellerSale {
-  itemId:      string;
-  productId:   string;
-  productName: string;
-  quantity:    number;
-  unitPrice:   number;
-  lineTotal:   number;
-  imageUrl:    string | null;
-  orderId:     string;
-  orderDate:   string;
-  orderStatus: string;
-}
-
-/** Seller: fetch all their completed sales (order items where seller_id = me) */
-export async function getSellerSales(): Promise<SellerSale[]> {
-  const { data } = await orderApi.get<SellerSale[]>("/sales/mine");
   return data;
 }
 
@@ -538,9 +574,9 @@ export async function getSellerReturns(): Promise<SellerReturnRow[]> {
 
 /** Buyer: initiate a return for one item from an order */
 export async function requestReturn(
-  orderId: string,
-  orderItemId: string,
-  reason?: string
+    orderId: string,
+    orderItemId: string,
+    reason?: string
 ): Promise<{ message: string; returnId: string; status: string }> {
   const { data } = await orderApi.post(`/${orderId}/return`, { orderItemId, reason });
   return data;
@@ -596,9 +632,9 @@ export async function getMyTrades(): Promise<TradeRecord[]> {
 
 /** Propose a trade: offer one of your products in exchange for another seller's */
 export async function proposeTrade(
-  offeredProductId: string,
-  requestedProductId: string,
-  notes?: string
+    offeredProductId: string,
+    requestedProductId: string,
+    notes?: string
 ): Promise<{ id: string; status: string }> {
   const { data } = await inventoryApi.post("/trades", { offeredProductId, requestedProductId, notes });
   return data;
@@ -624,48 +660,386 @@ export async function cancelTrade(tradeId: string): Promise<{ message: string }>
 
 /** Seller: bulk approve, decline, or dispute return requests */
 export async function actionReturn(
-  returnIds: string[],
-  action:    "approved" | "declined" | "disputed",
-  notes?:    string
+    returnIds: string[],
+    action:    "approved" | "declined" | "disputed",
+    notes?:    string
 ): Promise<{ message: string; action: string; updated: number }> {
   const { data } = await orderApi.put("/returns/action", { returnIds, action, notes });
   return data;
 }
 
-// ── Reviews ───────────────────────────────────────────────────────────────────
+// ── RSS Feed Types ────────────────────────────────────────────────────────────
 
-export interface Review {
-  id:              string;
-  buyerId:         string;
-  buyerFirstName:  string | null;
-  buyerLastName:   string | null;
-  rating:          number;
-  review:          string | null;
-  createdAt:       string;
+export interface RssFeedType {
+  id:           string;
+  name:         string;
+  shortDesc:    string;
+  longDesc:     string;
+  // Present when fetched by an authenticated seller
+  subscribed?:  boolean;
+  emailAlerts?: boolean;
+}
+
+export interface RssSubscription {
+  id:           string;
+  feedType:     string;
+  feedLabel:    string;
+  emailAlerts:  boolean;
+  subscribedAt: string;
+}
+
+export interface RssFeedItemMetadata {
+  // product_activations
+  productId?:    string;
+  productName?:  string;
+  description?:  string;
+  quantity?:     number;
+  unitPrice?:    string;
+  // product_blocks
+  reason?:       string;
+  // product_sales
+  orderId?:      string;
+  buyerName?:    string;
+  productCost?:  string;
+  // account_blocks
+  accountStatus?: string;
+  accountEmail?:  string;
+  accountName?:   string;
+}
+
+export interface RssFeedItem {
+  id:          string;
+  feedType:    string;
+  feedLabel:   string;
+  title:       string;
+  description: string;
+  link:        string;
+  metadata?:   RssFeedItemMetadata;
+  occurredAt:  string;
+}
+
+export interface RssAdminSummaryRow {
+  feedType:        string;
+  label:           string;
+  itemCount:       number;
+  subscriberCount: number;
+}
+
+export interface RssSubscriberRow {
+  id:             string;
+  sellerId:       string;
+  feedType:       string;
+  feedLabel:      string;
+  emailAlerts:    boolean;
+  subscribedAt:   string;
+  sellerDisplay:  string;
+}
+
+// ── RSS API calls ─────────────────────────────────────────────────────────────
+
+export async function getRssFeedTypes(): Promise<RssFeedType[]> {
+  const { data } = await adminApi.get<RssFeedType[]>("/rss/feed-types");
+  return data;
+}
+
+export async function getMyRssSubscriptions(): Promise<RssSubscription[]> {
+  const { data } = await adminApi.get<RssSubscription[]>("/rss/subscriptions");
+  return data;
+}
+
+export async function subscribeRss(feedTypes: string[], emailAlerts = true): Promise<void> {
+  await adminApi.post("/rss/subscribe", { feedTypes, emailAlerts });
+}
+
+export async function unsubscribeRss(feedTypes: string[]): Promise<void> {
+  await adminApi.delete("/rss/unsubscribe", { data: { feedTypes } });
+}
+
+export async function getRssFeedItems(opts: { limit?: number; type?: string } = {}): Promise<RssFeedItem[]> {
+  const params: Record<string, string> = {};
+  if (opts.limit) params["limit"] = String(opts.limit);
+  if (opts.type)  params["type"]  = opts.type;
+  const { data } = await adminApi.get<RssFeedItem[]>("/rss/feeds", { params });
+  return data;
+}
+
+export async function getRssAdminSummary(): Promise<{ summary: RssAdminSummaryRow[]; recentItems: RssFeedItem[] }> {
+  const { data } = await adminApi.get<{ summary: RssAdminSummaryRow[]; recentItems: RssFeedItem[] }>("/rss/admin/summary");
+  return data;
+}
+
+export async function getRssAdminSubscribers(): Promise<RssSubscriberRow[]> {
+  const { data } = await adminApi.get<RssSubscriberRow[]>("/rss/admin/subscribers");
+  return data;
+}
+
+// ── Admin account status (activate / suspend / close) ─────────────────────────
+
+export async function updateAccountStatus(
+    accountIds: string[],
+    status: "active" | "suspended" | "closed"
+): Promise<{ message: string; count: number }> {
+  const { data } = await adminApi.post<{ message: string; count: number }>(
+      "/accounts/status",
+      { accountIds, status }
+  );
+  return data;
+}
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+
+export interface AuditLogRow {
+  id:             string;
+  action:         string;
+  detail:         string | null;
+  occurredAt:     string;
+  actorEmail:     string;
+  actorFirstName: string;
+  actorLastName:  string;
+}
+
+export async function getAuditLogs(opts: {
+  limit?:  number;
+  offset?: number;
+  action?: string;
+}): Promise<{ rows: AuditLogRow[]; total: number }> {
+  const params: Record<string, string> = {};
+  if (opts.limit  !== undefined) params["limit"]  = String(opts.limit);
+  if (opts.offset !== undefined) params["offset"] = String(opts.offset);
+  if (opts.action)               params["action"] = opts.action;
+  const { data } = await adminApi.get<{ rows: AuditLogRow[]; total: number }>(
+      "/audit-logs", { params }
+  );
+  return data;
+}
+
+// ── Dashboard stats ──────────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  accounts: { total: number; pending: number };
+  products: { total: number; pending: number };
+  returns:  { active: number };
+  audit:    { total: number };
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const { data } = await adminApi.get<DashboardStats>("/stats");
+  return data;
+}
+
+// ── Admin returns ─────────────────────────────────────────────────────────────
+
+export interface AdminReturn {
+  id:          string;
+  orderId:     string;
+  productId:   string;
+  productName: string;
+  buyerId:     string;
+  sellerId:    string;
+  buyerName:   string;
+  sellerName:  string;
+  reason:      string | null;
+  status:      string;
+  createdAt:   string;
+  updatedAt:   string;
+}
+
+export async function getAdminReturns(): Promise<AdminReturn[]> {
+  const { data } = await adminApi.get<AdminReturn[]>("/returns");
+  return data;
+}
+
+// ── Buyer Profile — addresses + payment methods ───────────────────────────────
+
+export interface AddressRecord {
+  id?:          string;
+  addressType:  "billing" | "shipping";
+  street1:      string;
+  street2?:     string;
+  city:         string;
+  state:        string;  // abbreviation
+  stateName?:   string;
+  zipcode:      string;
+}
+
+export interface PaymentMethod {
+  id:          string;
+  type:        string;
+  nickname?:   string;
+  cardNumber:  string;   // last 4 digits
+  expMonth:    number;
+  expYear:     number;
+}
+
+export interface StateOption { id: string; name: string; abbreviation: string; }
+
+function accountId(): string {
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) {
+      const u = JSON.parse(raw) as { id: string };
+      return u.id ?? "";
+    }
+    return "";
+  } catch { return ""; }
+}
+
+export async function updateMyProfile(firstName: string, lastName: string): Promise<void> {
+  await accountApi.patch("/my/profile", { firstName, lastName });
+}
+
+export async function getMyAddresses(): Promise<AddressRecord[]> {
+  const id = accountId();
+  const { data } = await accountApi.get<AddressRecord[]>(`/${id}/addresses`);
+  return data;
+}
+
+export async function saveMyAddress(addr: AddressRecord): Promise<void> {
+  const id = accountId();
+  await accountApi.put(`/${id}/addresses`, addr);
+}
+
+export async function getMyPaymentMethods(): Promise<PaymentMethod[]> {
+  const id = accountId();
+  const { data } = await accountApi.get<PaymentMethod[]>(`/${id}/payment-methods`);
+  return data;
+}
+
+export async function addPaymentMethod(pm: {
+  type: string; nickname?: string;
+  cardNumber: string; expMonth: number; expYear: number;
+}): Promise<{ id: string }> {
+  const id = accountId();
+  const { data } = await accountApi.post<{ id: string }>(`/${id}/payment-methods`, pm);
+  return data;
+}
+
+export async function updatePaymentMethod(
+    pmId: string,
+    pm: { type?: string; nickname?: string; cardNumber?: string; expMonth?: number; expYear?: number }
+): Promise<void> {
+  const id = accountId();
+  await accountApi.put(`/${id}/payment-methods/${pmId}`, pm);
+}
+
+export async function deletePaymentMethod(pmId: string): Promise<void> {
+  const id = accountId();
+  await accountApi.delete(`/${id}/payment-methods/${pmId}`);
+}
+
+export async function getStates(): Promise<StateOption[]> {
+  try {
+    const { data } = await accountApi.get<StateOption[]>("/states");
+    return data;
+  } catch {
+    // Fallback: return the 50 US states hardcoded so the dropdown always works
+    return [
+      {id:"1",name:"Alabama",abbreviation:"AL"},{id:"2",name:"Alaska",abbreviation:"AK"},
+      {id:"3",name:"Arizona",abbreviation:"AZ"},{id:"4",name:"Arkansas",abbreviation:"AR"},
+      {id:"5",name:"California",abbreviation:"CA"},{id:"6",name:"Colorado",abbreviation:"CO"},
+      {id:"7",name:"Connecticut",abbreviation:"CT"},{id:"8",name:"Delaware",abbreviation:"DE"},
+      {id:"9",name:"Florida",abbreviation:"FL"},{id:"10",name:"Georgia",abbreviation:"GA"},
+      {id:"11",name:"Hawaii",abbreviation:"HI"},{id:"12",name:"Idaho",abbreviation:"ID"},
+      {id:"13",name:"Illinois",abbreviation:"IL"},{id:"14",name:"Indiana",abbreviation:"IN"},
+      {id:"15",name:"Iowa",abbreviation:"IA"},{id:"16",name:"Kansas",abbreviation:"KS"},
+      {id:"17",name:"Kentucky",abbreviation:"KY"},{id:"18",name:"Louisiana",abbreviation:"LA"},
+      {id:"19",name:"Maine",abbreviation:"ME"},{id:"20",name:"Maryland",abbreviation:"MD"},
+      {id:"21",name:"Massachusetts",abbreviation:"MA"},{id:"22",name:"Michigan",abbreviation:"MI"},
+      {id:"23",name:"Minnesota",abbreviation:"MN"},{id:"24",name:"Mississippi",abbreviation:"MS"},
+      {id:"25",name:"Missouri",abbreviation:"MO"},{id:"26",name:"Montana",abbreviation:"MT"},
+      {id:"27",name:"Nebraska",abbreviation:"NE"},{id:"28",name:"Nevada",abbreviation:"NV"},
+      {id:"29",name:"New Hampshire",abbreviation:"NH"},{id:"30",name:"New Jersey",abbreviation:"NJ"},
+      {id:"31",name:"New Mexico",abbreviation:"NM"},{id:"32",name:"New York",abbreviation:"NY"},
+      {id:"33",name:"North Carolina",abbreviation:"NC"},{id:"34",name:"North Dakota",abbreviation:"ND"},
+      {id:"35",name:"Ohio",abbreviation:"OH"},{id:"36",name:"Oklahoma",abbreviation:"OK"},
+      {id:"37",name:"Oregon",abbreviation:"OR"},{id:"38",name:"Pennsylvania",abbreviation:"PA"},
+      {id:"39",name:"Rhode Island",abbreviation:"RI"},{id:"40",name:"South Carolina",abbreviation:"SC"},
+      {id:"41",name:"South Dakota",abbreviation:"SD"},{id:"42",name:"Tennessee",abbreviation:"TN"},
+      {id:"43",name:"Texas",abbreviation:"TX"},{id:"44",name:"Utah",abbreviation:"UT"},
+      {id:"45",name:"Vermont",abbreviation:"VT"},{id:"46",name:"Virginia",abbreviation:"VA"},
+      {id:"47",name:"Washington",abbreviation:"WA"},{id:"48",name:"West Virginia",abbreviation:"WV"},
+      {id:"49",name:"Wisconsin",abbreviation:"WI"},{id:"50",name:"Wyoming",abbreviation:"WY"},
+    ];
+  }
+}
+
+// ── Password management ───────────────────────────────────────────────────────
+
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const { data } = await accountApi.post<{ message: string }>("/forgot-password", { email });
+  return data;
+}
+
+export async function resetPassword(
+    token: string,
+    newPassword: string
+): Promise<{ message: string }> {
+  const { data } = await accountApi.post<{ message: string }>("/reset-password", {
+    token, newPassword,
+  });
+  return data;
+}
+
+export async function changePassword(
+    currentPassword: string,
+    newPassword: string
+): Promise<{ message: string }> {
+  const { data } = await accountApi.post<{ message: string }>("/my/change-password", {
+    currentPassword, newPassword,
+  });
+  return data;
+}
+
+// ── Product Reviews ───────────────────────────────────────────────────────────
+
+export interface ReviewRecord {
+  id:             string;
+  rating:         number;
+  review:         string | null;
+  buyerFirstName: string | null;
+  buyerLastName:  string | null;
+  createdAt:      string;
 }
 
 export interface ReviewsResponse {
-  reviews:       Review[];
-  averageRating: number | null;
   totalReviews:  number;
+  averageRating: number;
+  reviews:       ReviewRecord[];
 }
 
-/** Fetch all reviews for a product */
 export async function getProductReviews(productId: string): Promise<ReviewsResponse> {
-  const { data } = await inventoryApi.get<ReviewsResponse>(`/products/${productId}/reviews`);
+  const { data } = await inventoryApi.get<ReviewsResponse>(
+      `/products/${productId}/reviews`
+  );
   return data;
 }
 
-/** Submit (or update) a review for a product — buyer only */
 export async function submitProductReview(
-  productId: string,
-  rating:    number,
-  review?:   string
-): Promise<Review> {
-  const { data } = await inventoryApi.post<Review>(`/products/${productId}/reviews`, { rating, review });
+    productId: string,
+    rating:    number,
+    review?:   string
+): Promise<{ message: string }> {
+  const { data } = await inventoryApi.post<{ message: string }>(
+      `/products/${productId}/reviews`,
+      { rating, review }
+  );
   return data;
 }
 
+// -- Seller Service API -------------------------------------------------------
+
+const sellerApi = axios.create({
+  baseURL: "/api/sellers",
+  headers: { "Content-Type": "application/json" },
+});
+
+sellerApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem("accessToken");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// SellerProfile — matches BuyerSellerPage.tsx usage
 export interface SellerProfile {
   id:         string;
   sellerId:   string;
@@ -675,45 +1049,66 @@ export interface SellerProfile {
   createdAt:  string;
 }
 
-/** Fetch a seller's public profile */
 export async function getSellerProfile(sellerId: string): Promise<SellerProfile> {
   const { data } = await sellerApi.get<SellerProfile>(`/${sellerId}`);
   return data;
 }
 
+// getSellerReviews returns ReviewsResponse (same type used by BuyerProductDetail)
+export async function getSellerReviews(sellerId: string): Promise<ReviewsResponse> {
+  const { data } = await sellerApi.get<ReviewsResponse>(`/${sellerId}/ratings`);
+  return data;
+}
+
+export async function submitSellerReview(
+    sellerId: string,
+    rating:   number,
+    review?:  string
+): Promise<{ message: string }> {
+  const { data } = await sellerApi.post<{ message: string }>(
+      `/${sellerId}/reviews`,
+      { rating, review }
+  );
+  return data;
+}
+
+export async function getProductsBySeller(sellerId: string): Promise<Product[]> {
+  const { data } = await inventoryApi.get<Product[]>(`/products/by-seller/${sellerId}`);
+  return data;
+}
+
+// -- Account Info ------------------------------------------------------------
+
 export interface AccountInfo {
   id:        string;
-  email:     string;
   firstName: string;
   lastName:  string;
-  type:      string;
-  status:    string;
+  email:     string;
 }
 
-/** Fetch basic account info by ID (public endpoint) */
-export async function getAccountById(id: string): Promise<AccountInfo> {
-  const { data } = await accountApi.get<AccountInfo>(`/${id}`);
+export async function getAccountById(accountId: string): Promise<AccountInfo> {
+  const { data } = await accountApi.get<AccountInfo>(`/${accountId}`);
   return data;
 }
 
-/** Fetch all reviews for a seller */
-export async function getSellerReviews(sellerId: string): Promise<ReviewsResponse> {
-  const { data } = await sellerApi.get<ReviewsResponse>(`/${sellerId}/reviews`);
-  return data;
+// -- Seller Sales ------------------------------------------------------------
+
+// SellerSale — matches SellerHome.tsx usage (lineTotal, itemId, imageUrl, orderDate, orderStatus)
+export interface SellerSale {
+  itemId:      string;
+  orderId:     string;
+  productId:   string;
+  productName: string;
+  imageUrl:    string | null;
+  quantity:    number;
+  unitPrice:   number;
+  lineTotal:   number;
+  buyerName:   string;
+  orderDate:   string;
+  orderStatus: string;
 }
 
-/** Submit (or update) a review for a seller — buyer only */
-export async function submitSellerReview(
-  sellerId: string,
-  rating:   number,
-  review?:  string
-): Promise<Review> {
-  const { data } = await sellerApi.post<Review>(`/${sellerId}/reviews`, { rating, review });
+export async function getSellerSales(): Promise<SellerSale[]> {
+  const { data } = await orderApi.get<SellerSale[]>("/sales/mine");
   return data;
-}
-
-/** Fetch active products belonging to a specific seller */
-export async function getProductsBySeller(sellerId: string): Promise<Product[]> {
-  const { data } = await inventoryApi.get<Product[]>("/products/active");
-  return (data as (Product & { sellerId?: string })[]).filter((p) => p.sellerId === sellerId);
 }

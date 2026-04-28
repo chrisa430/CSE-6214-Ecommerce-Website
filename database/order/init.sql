@@ -95,7 +95,6 @@ CREATE TABLE IF NOT EXISTS completed_order_items (
 
 CREATE INDEX idx_coi_order_id   ON completed_order_items(order_id);
 CREATE INDEX idx_coi_product_id ON completed_order_items(product_id);
-CREATE INDEX idx_coi_seller_id  ON completed_order_items(seller_id);
 
 CREATE TABLE IF NOT EXISTS address (
                                        id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),

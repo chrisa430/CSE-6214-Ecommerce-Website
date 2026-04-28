@@ -1,5 +1,22 @@
 version: "3.9"
 
+# ── Reusable healthcheck snippets ─────────────────────────────────────────────
+x-postgres-healthcheck: &postgres-healthcheck
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+    interval: 5s
+    timeout: 5s
+    retries: 10
+    start_period: 10s
+
+x-kafka-healthcheck: &kafka-healthcheck
+  healthcheck:
+    test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+    interval: 10s
+    timeout: 10s
+    retries: 15
+    start_period: 30s
+
 services:
   # ── Zookeeper ──────────────────────────────────────────────────────────────
   zookeeper:
@@ -12,13 +29,20 @@ services:
       - "2181:2181"
     networks:
       - sportvault-net
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep Mode"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   # ── Apache Kafka ───────────────────────────────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: kafka
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9092:9092"
     environment:
@@ -31,13 +55,15 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     networks:
       - sportvault-net
+    <<: *kafka-healthcheck
 
   # ── Kafka Topic Provisioner ────────────────────────────────────────────────
   kafka-init:
     image: confluentinc/cp-kafka:7.6.1
     container_name: kafka-init
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     entrypoint: [ "/bin/sh", "-c" ]
     command: |
       "
@@ -75,6 +101,7 @@ services:
       - ./database/authn_authz/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sportvault-net
+    <<: *postgres-healthcheck
 
   postgres-account:
     image: postgres:16-alpine
@@ -90,6 +117,7 @@ services:
       - ./database/account/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sportvault-net
+    <<: *postgres-healthcheck
 
   postgres-admin:
     image: postgres:16-alpine
@@ -105,6 +133,7 @@ services:
       - ./database/admin/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sportvault-net
+    <<: *postgres-healthcheck
 
   postgres-shopping-cart:
     image: postgres:16-alpine
@@ -120,6 +149,7 @@ services:
       - ./database/shopping_cart/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sportvault-net
+    <<: *postgres-healthcheck
 
   postgres-order:
     image: postgres:16-alpine
@@ -135,6 +165,7 @@ services:
       - ./database/order/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sportvault-net
+    <<: *postgres-healthcheck
 
   postgres-inventory:
     image: postgres:16-alpine
@@ -150,6 +181,7 @@ services:
       - ./database/inventory/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sportvault-net
+    <<: *postgres-healthcheck
 
   postgres-seller:
     image: postgres:16-alpine
@@ -165,6 +197,7 @@ services:
       - ./database/seller/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - sportvault-net
+    <<: *postgres-healthcheck
 
   # ── Microservices ──────────────────────────────────────────────────────────
   authn-authz-service:
@@ -192,8 +225,10 @@ services:
     ports:
       - "3001:3001"
     depends_on:
-      - postgres-authn
-      - kafka
+      postgres-authn:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - sportvault-net
     restart: unless-stopped
@@ -214,6 +249,7 @@ services:
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: account-service
       INTERNAL_SECRET: internal-secret
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_access_secret_change_me}
       APP_BASE_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
       SEED_PASSWORD: ${SEED_PASSWORD}
@@ -225,8 +261,10 @@ services:
     ports:
       - "3002:3002"
     depends_on:
-      - postgres-account
-      - kafka
+      postgres-account:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - sportvault-net
     restart: unless-stopped
@@ -266,14 +304,20 @@ services:
       APP_BASE_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
       OUTBOX_POLL_MS: 30000
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
     ports:
       - "3003:3003"
     depends_on:
-      - postgres-admin
-      - postgres-account
-      - postgres-inventory
-      - postgres-order
-      - kafka
+      postgres-admin:
+        condition: service_healthy
+      postgres-account:
+        condition: service_healthy
+      postgres-inventory:
+        condition: service_healthy
+      postgres-order:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - sportvault-net
     restart: unless-stopped
@@ -299,8 +343,10 @@ services:
     ports:
       - "3004:3004"
     depends_on:
-      - postgres-shopping-cart
-      - kafka
+      postgres-shopping-cart:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - sportvault-net
     restart: unless-stopped
@@ -348,12 +394,18 @@ services:
     ports:
       - "3005:3005"
     depends_on:
-      - postgres-order
-      - postgres-shopping-cart
-      - postgres-inventory
-      - postgres-admin
-      - postgres-account
-      - kafka
+      postgres-order:
+        condition: service_healthy
+      postgres-shopping-cart:
+        condition: service_healthy
+      postgres-inventory:
+        condition: service_healthy
+      postgres-admin:
+        condition: service_healthy
+      postgres-account:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - sportvault-net
     restart: unless-stopped
@@ -371,21 +423,25 @@ services:
       DB_NAME: seller
       DB_USER: seller_user
       DB_PASS: seller_pass
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_CLIENT_ID: seller-service
-      INTERNAL_SECRET: internal-secret
-      CORS_ORIGIN: http://localhost:5173
       ACCOUNT_DB_HOST: postgres-account
       ACCOUNT_DB_PORT: 5432
       ACCOUNT_DB_NAME: account
       ACCOUNT_DB_USER: account_user
       ACCOUNT_DB_PASS: account_pass
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: seller-service
+      INTERNAL_SECRET: internal-secret
+      CORS_ORIGIN: http://localhost:5173
     ports:
       - "3006:3006"
     depends_on:
-      - postgres-seller
-      - postgres-account
-      - kafka
+      postgres-seller:
+        condition: service_healthy
+      postgres-account:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - sportvault-net
     restart: unless-stopped
@@ -416,9 +472,12 @@ services:
     ports:
       - "3007:3007"
     depends_on:
-      - postgres-inventory
-      - postgres-account
-      - kafka
+      postgres-inventory:
+        condition: service_healthy
+      postgres-account:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
     networks:
       - sportvault-net
     restart: unless-stopped

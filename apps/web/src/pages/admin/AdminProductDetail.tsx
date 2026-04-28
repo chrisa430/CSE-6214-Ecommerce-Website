@@ -229,7 +229,7 @@ export default function AdminProductDetail() {
       </SectionCard>
 
       {/* Images */}
-      {product.images.length > 0 && (
+      {(product.images ?? []).length > 0 && (
         <div className="card cardPad">
           <div className="h2" style={{ marginBottom: 12 }}>Product Images</div>
           <div className="divider" style={{ marginBottom: 16 }} />
@@ -246,7 +246,7 @@ export default function AdminProductDetail() {
                 </tr>
               </thead>
               <tbody>
-                {product.images.map((img, idx) => (
+                {(product.images ?? []).map((img, idx) => (
                   <tr key={img.id}>
                     <td style={{ color: "var(--muted)", fontSize: 12 }}>{img.sortOrder ?? idx + 1}</td>
                     <td style={{ fontFamily: "monospace", fontSize: 11 }}>{img.id}</td>

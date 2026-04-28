@@ -32,11 +32,11 @@ CREATE TABLE IF NOT EXISTS seller_rating (
     buyer_id   UUID        NOT NULL,                -- FK to account.account (app-enforced)
     rating     INTEGER     NOT NULL CHECK (rating BETWEEN 1 AND 5),
     review     TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (seller_id, buyer_id)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_sr_seller_id ON seller_rating(seller_id);
-CREATE INDEX idx_sr_buyer_id  ON seller_rating(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_sr_seller_id ON seller_rating(seller_id);
+CREATE INDEX IF NOT EXISTS idx_sr_buyer_id  ON seller_rating(buyer_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_uq_sr_seller_buyer ON seller_rating(seller_id, buyer_id);
 
 CREATE TABLE IF NOT EXISTS seller_audit_log (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

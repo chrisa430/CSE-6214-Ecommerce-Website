@@ -26,8 +26,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
-    const raw = localStorage.getItem("user");
-    return raw ? (JSON.parse(raw) as AuthUser) : null;
+    try {
+      const raw = localStorage.getItem("user");
+      return raw ? (JSON.parse(raw) as AuthUser) : null;
+    } catch {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      return null;
+    }
   });
 
   const login = useCallback(async (payload: LoginPayload): Promise<LoginResponse> => {

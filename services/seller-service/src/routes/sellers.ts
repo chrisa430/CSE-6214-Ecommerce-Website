@@ -20,7 +20,7 @@ function requireInternalSecret(req: Request, res: Response, next: () => void): v
   next();
 }
 
-// GET /sellers/:id — fetch seller profile (auto-creates a minimal one if absent)
+// GET /sellers/:id — fetch seller profile (placeholder)
 router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   const pool = getPool();
   try {
@@ -53,8 +53,8 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   } catch (err) { logger.error("Get seller error", err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// GET /sellers/:id/reviews — fetch seller reviews with aggregate stats
-router.get("/:id/reviews", async (req: Request, res: Response): Promise<void> => {
+// GET /sellers/:id/ratings — fetch ratings (placeholder)
+router.get("/:id/ratings", async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await getPool().query(
       `SELECT id, buyer_id AS "buyerId", rating, review, created_at AS "createdAt"

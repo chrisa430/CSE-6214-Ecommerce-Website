@@ -9,6 +9,12 @@ import AdminSubpage  from "./pages/admin/AdminSubpage";
 import AdminProducts      from "./pages/admin/AdminProducts";
 import AdminProductDetail from "./pages/admin/AdminProductDetail";
 import AdminOrders        from "./pages/admin/AdminOrders";
+import AdminRSSFeeds       from "./pages/admin/AdminRSSFeeds";
+import AdminAuditLogs      from "./pages/admin/AdminAuditLogs";
+import AdminReturns        from "./pages/admin/AdminReturns";
+import ForgotPassword      from "./pages/ForgotPassword";
+import ResetPassword       from "./pages/ResetPassword";
+import ChangePassword      from "./pages/ChangePassword";
 
 import BuyerLayout   from "./layouts/BuyerLayout";
 import BuyerHome     from "./pages/buyer/BuyerHome";
@@ -19,9 +25,9 @@ import BuyerProfile from "./pages/buyer/BuyerProfile";
 import BuyerOrders from "./pages/buyer/BuyerOrders";
 import BuyerOrderDetail from "./pages/buyer/BuyerOrderDetail";
 import BuyerReturns from "./pages/buyer/BuyerReturns";
-import BuyerCompare from "./pages/buyer/BuyerCompare";
-import BuyerProductDetail from "./pages/buyer/BuyerProductDetail";
-import BuyerSellerPage from "./pages/buyer/BuyerSellerPage";
+import BuyerCompare        from "./pages/buyer/BuyerCompare";
+import BuyerProductDetail  from "./pages/buyer/BuyerProductDetail";
+import BuyerSellerPage     from "./pages/buyer/BuyerSellerPage";
 
 import SellerLayout  from "./layouts/SellerLayout";
 import SellerHome    from "./pages/seller/SellerHome";
@@ -30,11 +36,14 @@ import InventoryManagement from "./pages/seller/InventoryManagement";
 import SellerProfile from "./pages/seller/SellerProfile";
 import SellerReturns from "./pages/seller/SellerReturns";
 import SellerTrades  from "./pages/seller/SellerTrades";
+import SellerRSSFeeds from "./pages/seller/SellerRSSFeeds";
 
 export const router = createBrowserRouter([
   { path: "/",        element: <Navigate to="/login" replace /> },
-  { path: "/login",   element: <Login /> },
-  { path: "/register",element: <Register /> },
+  { path: "/login",          element: <Login /> },
+  { path: "/register",       element: <Register /> },
+  { path: "/forgot-password",element: <ForgotPassword /> },
+  { path: "/reset-password", element: <ResetPassword /> },
 
   {
     path: "/admin",
@@ -45,6 +54,10 @@ export const router = createBrowserRouter([
       { path: "products",         element: <AdminProducts /> },
       { path: "products/:id",     element: <AdminProductDetail /> },
       { path: "orders",            element: <AdminOrders /> },
+      { path: "rss-feeds",         element: <AdminRSSFeeds /> },
+      { path: "audit-logs",        element: <AdminAuditLogs /> },
+      { path: "returns",           element: <AdminReturns /> },
+      { path: "change-password",   element: <ChangePassword /> },
     ],
   },
 
@@ -63,6 +76,7 @@ export const router = createBrowserRouter([
       { path: "compare",            element: <BuyerCompare /> },
       { path: "products/:id",       element: <BuyerProductDetail /> },
       { path: "sellers/:sellerId",  element: <BuyerSellerPage /> },
+      { path: "change-password",    element: <ChangePassword /> },
     ],
   },
 
@@ -76,6 +90,8 @@ export const router = createBrowserRouter([
       { path: "profile",   element: <SellerProfile /> },
       { path: "returns",   element: <SellerReturns /> },
       { path: "trades",    element: <SellerTrades /> },
+      { path: "rss-feeds",  element: <SellerRSSFeeds /> },
+      { path: "change-password", element: <ChangePassword /> },
     ],
   },
 ]);

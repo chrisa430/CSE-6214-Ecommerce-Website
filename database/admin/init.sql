@@ -158,3 +158,59 @@ INSERT INTO notification_type (name, short_desc, long_desc) VALUES
   ('return_disputed_buyer',   'Return Disputed — Buyer Notification',   'Buyer notification that their return has been disputed'),
   ('return_action_admin',     'Return Action — Admin Alert',            'Admin alert when a seller declines or disputes a return')
 ON CONFLICT DO NOTHING;
+
+-- ── RSS Feed Tables ──────────────────────────────────────────────────────────
+-- rss_feed_type: the four named feed channels sellers can subscribe to
+CREATE TABLE IF NOT EXISTS rss_feed_type (
+    id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       VARCHAR(64)  NOT NULL UNIQUE,
+    short_desc VARCHAR(128),
+    long_desc  TEXT,
+    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO rss_feed_type (name, short_desc, long_desc) VALUES
+  ('product_activations', 'Product Activations', 'Feed of products approved/activated by admins'),
+  ('product_blocks',      'Product Blocks',      'Feed of products suspended/blocked by admins'),
+  ('product_sales',       'Product Sales',       'Feed of product sales completed by buyers'),
+  ('product_returns',     'Product Returns',     'Feed of product return requests submitted by buyers'),
+  ('account_blocks',      'Account Blocks',      'Feed of seller/buyer account suspensions by admins')
+ON CONFLICT DO NOTHING;
+
+-- rss_subscription: which sellers subscribe to which feed types
+CREATE TABLE IF NOT EXISTS rss_subscription (
+    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    seller_id    UUID        NOT NULL,   -- FK to account.account (app-enforced)
+    feed_type_id UUID        NOT NULL REFERENCES rss_feed_type(id),
+    email_alerts BOOLEAN     NOT NULL DEFAULT TRUE,
+    subscribed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (seller_id, feed_type_id)
+);
+
+CREATE INDEX idx_rss_sub_seller   ON rss_subscription(seller_id);
+CREATE INDEX idx_rss_sub_feedtype ON rss_subscription(feed_type_id);
+
+-- rss_feed_item: individual events surfaced in each feed
+CREATE TABLE IF NOT EXISTS rss_feed_item (
+    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    feed_type_id UUID        NOT NULL REFERENCES rss_feed_type(id),
+    title        VARCHAR(255) NOT NULL,
+    description  TEXT,
+    link         VARCHAR(512),
+    author       VARCHAR(128),
+    reference_id UUID,        -- product_id, order_id, return_id, or account_id
+    metadata     JSONB,       -- structured fields specific to each feed type
+    occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_rss_item_feedtype    ON rss_feed_item(feed_type_id);
+CREATE INDEX idx_rss_item_occurred_at ON rss_feed_item(occurred_at DESC);
+
+-- ── RSS notification types ───────────────────────────────────────────────────
+INSERT INTO notification_type (name, short_desc, long_desc) VALUES
+  ('rss_product_activation', 'RSS — Product Activated',  'Email alert to subscribed seller: admin activated a product'),
+  ('rss_product_block',      'RSS — Product Blocked',    'Email alert to subscribed seller: admin blocked/suspended a product'),
+  ('rss_product_sale',       'RSS — Product Sale',       'Email alert to subscribed seller: one of their products was sold'),
+  ('rss_product_return',     'RSS — Product Return',     'Email alert to subscribed seller: buyer initiated a return on their product'),
+  ('rss_account_block',      'RSS — Account Blocked',    'Email alert to subscribed seller: an account was suspended/blocked by admins')
+ON CONFLICT DO NOTHING;
