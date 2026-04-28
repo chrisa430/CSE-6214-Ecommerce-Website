@@ -20,7 +20,7 @@ function requireInternalSecret(req: Request, res: Response, next: () => void): v
   next();
 }
 
-// GET /sellers/:id — fetch seller profile (placeholder)
+// GET /sellers/:id — fetch seller profile (auto-creates a minimal one if absent)
 router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   const pool = getPool();
   try {
@@ -53,8 +53,8 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   } catch (err) { logger.error("Get seller error", err); res.status(500).json({ error: "Internal server error" }); }
 });
 
-// GET /sellers/:id/ratings — fetch ratings (placeholder)
-router.get("/:id/ratings", async (req: Request, res: Response): Promise<void> => {
+// GET /sellers/:id/reviews — fetch seller reviews with aggregate stats
+router.get("/:id/reviews", async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await getPool().query(
       `SELECT id, buyer_id AS "buyerId", rating, review, created_at AS "createdAt"
@@ -66,20 +66,29 @@ router.get("/:id/ratings", async (req: Request, res: Response): Promise<void> =>
        FROM seller_rating WHERE seller_id = $1`,
       [req.params.id]
     );
-    // Enrich each review with the buyer's name from the account DB
+    // Enrich each review with buyer names from account DB (non-fatal, 3s timeout)
     const reviews = result.rows;
     if (reviews.length > 0) {
       const buyerIds = [...new Set(reviews.map((r: any) => r.buyerId))];
-      const accounts = await getAccountPool().query(
-        `SELECT id, first_name AS "firstName", last_name AS "lastName"
-         FROM account WHERE id = ANY($1::uuid[])`,
-        [buyerIds]
-      );
-      const nameMap: Record<string, { firstName: string; lastName: string }> = {};
-      for (const row of accounts.rows) nameMap[row.id] = row;
-      for (const r of reviews) {
-        r.buyerFirstName = nameMap[r.buyerId]?.firstName ?? null;
-        r.buyerLastName  = nameMap[r.buyerId]?.lastName  ?? null;
+      try {
+        const accounts = await Promise.race([
+          getAccountPool().query(
+            `SELECT id, first_name AS "firstName", last_name AS "lastName"
+             FROM account WHERE id = ANY($1::uuid[])`,
+            [buyerIds]
+          ),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Account pool timeout")), 3000)
+          ),
+        ]);
+        const nameMap: Record<string, { firstName: string; lastName: string }> = {};
+        for (const row of (accounts as any).rows) nameMap[row.id] = row;
+        for (const r of reviews) {
+          r.buyerFirstName = nameMap[r.buyerId]?.firstName ?? null;
+          r.buyerLastName  = nameMap[r.buyerId]?.lastName  ?? null;
+        }
+      } catch {
+        for (const r of reviews) { r.buyerFirstName = null; r.buyerLastName = null; }
       }
     }
 
@@ -108,13 +117,14 @@ router.post(
     }
 
     try {
-      const seller = await getPool().query(
-        "SELECT id FROM seller_profile WHERE seller_id = $1", [sellerId]
+      // Auto-create a minimal seller profile if none exists (mirrors GET /:id behaviour)
+      await getPool().query(
+        `INSERT INTO seller_profile (seller_id, status_id, store_name, bio)
+         SELECT $1, ss.id, NULL, NULL
+         FROM seller_status ss WHERE ss.name = 'active'
+         ON CONFLICT (seller_id) DO NOTHING`,
+        [sellerId]
       );
-      if (!seller.rowCount) {
-        res.status(404).json({ error: "Seller not found" });
-        return;
-      }
 
       const result = await getPool().query(
         `INSERT INTO seller_rating (seller_id, buyer_id, rating, review)
