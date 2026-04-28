@@ -269,7 +269,7 @@ export default function BuyerProductDetail() {
               </span>
             </div>
             <div className="divider" />
-            {reviewData.reviews.map((r) => (
+            {(reviewData.reviews ?? []).map((r) => (
               <div key={r.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <StarDisplay rating={r.rating} />

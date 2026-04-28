@@ -104,7 +104,7 @@ export default function SellerRSSFeeds() {
   const loadItems = useCallback(async () => {
     try {
       const items = await getRssFeedItems({ limit: 20 });
-      setRecentItems(items);
+      setRecentItems(Array.isArray(items) ? items : []);
     } catch { /* non-fatal */ }
   }, []);
 
