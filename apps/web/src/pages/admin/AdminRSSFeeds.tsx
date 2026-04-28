@@ -64,10 +64,10 @@ export default function AdminRSSFeeds() {
         getRssAdminSubscribers(),
         getRssFeedItems({ limit: 100 }),
       ]);
-      setSummary(sum.summary);
-      setRecentItems(sum.recentItems);
-      setSubscribers(subs);
-      setAllItems(items);
+      setSummary(Array.isArray(sum?.summary) ? sum.summary : []);
+      setRecentItems(Array.isArray(sum?.recentItems) ? sum.recentItems : []);
+      setSubscribers(Array.isArray(subs) ? subs : []);
+      setAllItems(Array.isArray(items) ? items : []);
     } catch {
       // noop
     } finally {
