@@ -1066,7 +1066,7 @@ export async function submitSellerReview(
     review?:  string
 ): Promise<{ message: string }> {
   const { data } = await sellerApi.post<{ message: string }>(
-      `/${sellerId}/ratings`,
+      `/${sellerId}/reviews`,
       { rating, review }
   );
   return data;
@@ -1109,6 +1109,6 @@ export interface SellerSale {
 }
 
 export async function getSellerSales(): Promise<SellerSale[]> {
-  const { data } = await orderApi.get<SellerSale[]>("/my/sales");
+  const { data } = await orderApi.get<SellerSale[]>("/sales/mine");
   return data;
 }

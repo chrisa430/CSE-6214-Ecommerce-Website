@@ -34,8 +34,9 @@ CREATE TABLE IF NOT EXISTS seller_rating (
     review     TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_sr_seller_id ON seller_rating(seller_id);
-CREATE INDEX idx_sr_buyer_id  ON seller_rating(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_sr_seller_id ON seller_rating(seller_id);
+CREATE INDEX IF NOT EXISTS idx_sr_buyer_id  ON seller_rating(buyer_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_uq_sr_seller_buyer ON seller_rating(seller_id, buyer_id);
 
 CREATE TABLE IF NOT EXISTS seller_audit_log (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

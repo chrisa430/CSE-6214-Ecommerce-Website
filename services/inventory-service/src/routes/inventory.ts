@@ -103,6 +103,43 @@ router.get("/products/active", async (_req: Request, res: Response): Promise<voi
     }
 });
 
+// ── GET /inventory/products/by-seller/:sellerId ───────────────────────────────
+
+router.get("/products/by-seller/:sellerId", async (req: Request, res: Response): Promise<void> => {
+    try {
+        const result = await getPool().query(
+            `SELECT
+                 p.id,
+                 p.seller_id   AS "sellerId",
+                 p.name,
+                 p.short_desc  AS "shortDesc",
+                 p.long_desc   AS "longDesc",
+                 p.quantity,
+                 p.unit_price  AS "unitPrice",
+                 pst.name      AS status,
+                 p.created_at  AS "createdAt",
+                 p.updated_at  AS "updatedAt",
+                 COALESCE(
+                         (SELECT image_url FROM product_image
+                          WHERE product_id = p.id AND is_primary = TRUE LIMIT 1),
+             (SELECT image_url FROM product_image WHERE product_id = p.id LIMIT 1),
+             '/images/default-product.png'
+           ) AS "imageUrl"
+             FROM product p
+                      JOIN product_status_type pst ON pst.id = p.status_id
+             WHERE p.seller_id = $1
+               AND pst.code = 'active'
+               AND p.quantity > 0
+             ORDER BY p.created_at DESC`,
+            [req.params.sellerId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        logger.error("Get products by seller error", err);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
 // ── GET /inventory/products/mine ──────────────────────────────────────────────
 
 router.get(
@@ -396,17 +433,25 @@ router.get("/products/:id/reviews", async (req: Request, res: Response): Promise
         // Enrich each review with the buyer's name from the account DB
         const reviews = result.rows;
         if (reviews.length > 0) {
-            const buyerIds = [...new Set(reviews.map((r: any) => r.buyerId))];
-            const accounts = await getAccountPool().query(
-                `SELECT id, first_name AS "firstName", last_name AS "lastName"
-                 FROM account WHERE id = ANY($1::uuid[])`,
-                [buyerIds]
-            );
-            const nameMap: Record<string, { firstName: string; lastName: string }> = {};
-            for (const row of accounts.rows) nameMap[row.id] = row;
-            for (const r of reviews) {
-                r.buyerFirstName = nameMap[r.buyerId]?.firstName ?? null;
-                r.buyerLastName  = nameMap[r.buyerId]?.lastName  ?? null;
+            try {
+                const buyerIds = [...new Set(reviews.map((r: any) => r.buyerId))];
+                const accounts = await getAccountPool().query(
+                    `SELECT id, first_name AS "firstName", last_name AS "lastName"
+                     FROM account WHERE id = ANY($1::uuid[])`,
+                    [buyerIds]
+                );
+                const nameMap: Record<string, { firstName: string; lastName: string }> = {};
+                for (const row of accounts.rows) nameMap[row.id] = row;
+                for (const r of reviews) {
+                    r.buyerFirstName = nameMap[r.buyerId]?.firstName ?? null;
+                    r.buyerLastName  = nameMap[r.buyerId]?.lastName  ?? null;
+                }
+            } catch (accountErr) {
+                logger.warn("Could not enrich reviews with account data", accountErr);
+                for (const r of reviews) {
+                    r.buyerFirstName = null;
+                    r.buyerLastName  = null;
+                }
             }
         }
 

@@ -20,7 +20,7 @@ const PORT = parseInt(process.env.PORT || "3007");
 
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173", credentials: true }));
-app.use(express.json({ limit: "16kb" }));
+app.use(express.json({ limit: "10mb" }));
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000, max: 100,

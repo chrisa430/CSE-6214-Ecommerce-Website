@@ -393,6 +393,7 @@ export default function BuyerCheckout() {
     setError("");
     try {
       await checkout();
+      window.dispatchEvent(new CustomEvent("cartUpdated"));
       navigate("/buyer/orders");
     } catch (err: any) {
       setError(err?.response?.data?.error ?? "Checkout failed — please try again.");

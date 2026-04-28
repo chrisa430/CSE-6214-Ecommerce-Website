@@ -423,6 +423,12 @@ services:
       DB_NAME: seller
       DB_USER: seller_user
       DB_PASS: seller_pass
+      ACCOUNT_DB_HOST: postgres-account
+      ACCOUNT_DB_PORT: 5432
+      ACCOUNT_DB_NAME: account
+      ACCOUNT_DB_USER: account_user
+      ACCOUNT_DB_PASS: account_pass
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: seller-service
       INTERNAL_SECRET: internal-secret
@@ -431,6 +437,8 @@ services:
       - "3006:3006"
     depends_on:
       postgres-seller:
+        condition: service_healthy
+      postgres-account:
         condition: service_healthy
       kafka:
         condition: service_healthy

@@ -182,6 +182,20 @@ CREATE TRIGGER trg_product_updated_at
 BEFORE UPDATE ON product
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- ── product_review ───────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS product_review (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id  UUID        NOT NULL REFERENCES product(id) ON DELETE CASCADE,
+    buyer_id    UUID        NOT NULL,
+    rating      INTEGER     NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    review      TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (product_id, buyer_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_product_id ON product_review(product_id);
+CREATE INDEX IF NOT EXISTS idx_pr_buyer_id   ON product_review(buyer_id);
+
 -- ── trade_request ─────────────────────────────────────────────────────────────
 -- Tracks seller-to-seller trade proposals. Both products are locked to 'traded'
 -- status on acceptance; all other pending trades for those products are cancelled.

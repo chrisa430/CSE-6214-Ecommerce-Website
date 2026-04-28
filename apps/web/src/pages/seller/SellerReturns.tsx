@@ -8,7 +8,7 @@
  * and Approve, Decline, or Dispute the returns.
  * Notifications are sent automatically on action.
  */
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { getSellerReturns, actionReturn, SellerReturnRow, extractApiError } from "../../services/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -295,9 +295,8 @@ export default function SellerReturns() {
                 const pendingItems = returnItems.filter((i) => i.returnStatus === "pending");
 
                 return (
-                  <>
+                  <React.Fragment key={group.orderId}>
                     <tr
-                      key={group.orderId}
                       onClick={() => toggle(group.orderId)}
                       style={{
                         cursor:"pointer",
@@ -423,7 +422,7 @@ export default function SellerReturns() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 );
               })}
             </tbody>
